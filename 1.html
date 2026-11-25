@@ -1,302 +1,525 @@
-<!DOCTYPE html>  
-<html lang="zh-HK">  
-<head>  
-  <meta charset="UTF-8" />  
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />  
-  <title>Admin 還原相片與快速 Mapping</title>  
-  <style>  
-    :root {  
-      --bg: #0f172a;  
-      --card: #1e293b;  
-      --card-light: #334155;  
-      --text: #f8fafc;  
-      --muted: #94a3b8;  
-      --accent: #38bdf8;  
-      --green: #22c55e;  
-      --border: #475569;  
-    }  
-    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif; }  
-    body { margin: 0; background: var(--bg); color: var(--text); padding: 16px; }  
-  
-    .wrap { max-width: 1100px; margin: 0 auto; }  
-    .top-bar {  
-      display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap;  
-      background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; margin-bottom: 16px;  
-    }  
-    .top-bar h1 { margin: 0; font-size: 1.3rem; }  
-  
-    .btn {  
-      padding: 10px 16px; border-radius: 10px; border: 1px solid var(--border);  
-      background: var(--card-light); color: #fff; font-weight: 700; font-size: 0.98rem; cursor: pointer;  
-    }  
-    .btn-primary { background: var(--accent); color: #082f49; border: none; font-weight: 800; }  
-    .btn-green { background: var(--green); color: #052e16; border: none; font-weight: 800; }  
-  
-    .grid-main { display: grid; grid-template-columns: 1.25fr 1fr; gap: 16px; }  
-    @media (max-width: 820px) { .grid-main { grid-template-columns: 1fr; } }  
-  
-    .box {  
-      background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px;  
-    }  
-  
-    .photo-stage {  
-      background: #000; border: 1px solid var(--border); border-radius: 12px;  
-      min-height: 360px; display: flex; align-items: center; justify-content: center; overflow: hidden; padding: 8px;  
-    }  
-    .photo-stage img {  
-      max-width: 100%; max-height: 460px; object-fit: contain; transition: transform 0.2s ease;  
-    }  
-  
-    .toolbar { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; align-items: center; justify-content: space-between; }  
-    .nav-group { display: flex; gap: 8px; }  
-  
-    label { display: block; font-size: 0.92rem; font-weight: 700; margin-bottom: 5px; color: #e2e8f0; }  
-    input[type="text"], select {  
-      width: 100%; padding: 10px 12px; font-size: 1rem; border-radius: 8px;  
-      border: 1px solid var(--border); background: #0f172a; color: #fff; margin-bottom: 10px;  
-    }  
-  
-    .table-wrap { overflow-x: auto; margin-top: 16px; }  
-    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }  
-    th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; }  
-    th { background: var(--card-light); }  
-    tr.active-row { background: rgba(56, 189, 248, 0.14); }  
-  </style>  
-</head>  
-<body>  
-<div class="wrap">  
-  <div class="top-bar">  
-    <h1>🖥️ Admin 睇相與 Mapping 工作台</h1>  
-    <div style="display:flex; gap:8px; flex-wrap:wrap;">  
-      <label class="btn btn-primary" for="json-file-input" style="margin:0;">📂 匯入 Runner JSON 檔</label>  
-      <input type="file" id="json-file-input" accept=".json,application/json" hidden />  
-      <button class="btn btn-green" type="button" onclick="exportMappedCsv()">📊 匯出 Mapping CSV</button>  
-    </div>  
-  </div>  
-  
-  <div class="grid-main">  
-    <!-- 左邊：還原出嚟嘅相片 -->  
-    <div class="box">  
-      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">  
-        <strong id="item-counter">未匯入相片（0 / 0）</strong>  
-        <span id="item-time" style="color:var(--muted); font-size:0.92rem;">—</span>  
-      </div>  
-  
-      <div class="photo-stage">  
-        <img id="stage-img" alt="還原相片" style="display:none;" />  
-        <span id="stage-empty" style="color:var(--muted);">請按上方「匯入 Runner JSON 檔」載入相片</span>  
-      </div>  
-  
-      <div class="toolbar">  
-        <div class="nav-group">  
-          <button class="btn" type="button" onclick="prevItem()">⬅️ 上一張</button>  
-          <button class="btn" type="button" onclick="nextItem()">下一張 ➡️</button>  
-        </div>  
-        <div class="nav-group">  
-          <button class="btn" type="button" onclick="rotateStage(-90)">↺ 左轉 90°</button>  
-          <button class="btn" type="button" onclick="rotateStage(90)">↻ 右轉 90°</button>  
-        </div>  
-      </div>  
-    </div>  
-  
-    <!-- 右邊：快速填寫 / 對數 -->  
-    <div class="box">  
-      <h2 style="margin:0 0 12px; font-size:1.15rem;">✏️ 核對 / 填寫資料</h2>  
-  
-      <label for="m-door">門號（1–96）</label>  
-      <select id="m-door" onchange="updateCurrentField('door', parseInt(this.value, 10))"></select>  
-  
-      <label for="m-barcode">熱感紙 Barcode</label>  
-      <input type="text" id="m-barcode" placeholder="輸入或貼上條碼" oninput="updateCurrentField('barcode', this.value)" />  
-  
-      <label for="m-po">PO Number</label>  
-      <input type="text" id="m-po" placeholder="例如: 3401231649" oninput="updateCurrentField('po', this.value)" />  
-  
-      <label for="m-grn">Goods Receipt No.</label>  
-      <input type="text" id="m-grn" placeholder="例如: 5004562328" oninput="updateCurrentField('grn', this.value)" />  
-  
-      <label for="m-dept">Department Name</label>  
-      <input type="text" id="m-dept" placeholder="例如: Okura F&B Admin BO" oninput="updateCurrentField('dept', this.value)" />  
-  
-      <label for="m-req">Requestor</label>  
-      <input type="text" id="m-req" placeholder="例如: risa akiyama" oninput="updateCurrentField('requestor', this.value)" />  
-  
-      <button class="btn btn-green" style="width:100%; padding:13px;" type="button" onclick="nextItem()">✅ 填好呢張，去下一張 ➡️</button>  
-    </div>  
-  </div>  
-  
-  <!-- 底部總表 -->  
-  <div class="box table-wrap">  
-    <h2 style="margin:0 0 10px; font-size:1.15rem;">📋 已載入清單總覽</h2>  
-    <table>  
-      <thead>  
-        <tr>  
-          <th>#</th>  
-          <th>影相時間</th>  
-          <th>門號</th>  
-          <th>Barcode</th>  
-          <th>PO</th>  
-          <th>GRN</th>  
-          <th>Department</th>  
-          <th>Requestor</th>  
-        </tr>  
-      </thead>  
-      <tbody id="summary-tbody"></tbody>  
-    </table>  
-  </div>  
-</div>  
-  
-<script>  
-  let items = [];  
-  let currentIndex = 0;  
-  let currentRot = 0;  
-  
-  function initDoorSelect() {  
-    const sel = document.getElementById('m-door');  
-    sel.innerHTML = '';  
-    for (let d = 1; d <= 96; d++) {  
-      const opt = document.createElement('option');  
-      opt.value = d;  
-      opt.textContent = `Door #${String(d).padStart(2, '0')}`;  
-      sel.appendChild(opt);  
-    }  
-  }  
-  
-  document.getElementById('json-file-input').addEventListener('change', async e => {  
-    const file = e.target.files[0];  
-    if (!file) return;  
-    try {  
-      const text = await file.text();  
-      const parsed = JSON.parse(text);  
-      if (!Array.isArray(parsed) || !parsed.length) {  
-        return alert('呢個 JSON 檔入面冇相片紀錄。');  
-      }  
-      items = parsed.map((raw, idx) => ({  
-        seq: idx + 1,  
-        timeLabel: raw.timeLabel || raw.timeIso || '',  
-        timeIso: raw.timeIso || raw.time || '',  
-        photo: raw.photo || '',  
-        door: raw.door || 1,  
-        barcode: raw.barcode || '',  
-        po: raw.po || '',  
-        grn: raw.grn || '',  
-        dept: raw.dept || '',  
-        requestor: raw.requestor || ''  
-      }));  
-      currentIndex = 0;  
-      currentRot = 0;  
-      renderCurrent();  
-      renderTable();  
-    } catch (_) {  
-      alert('無法讀取呢個 JSON 檔，請確認係由 Runner 匯出嘅 .json。');  
-    }  
-  });  
-  
-  function renderCurrent() {  
-    const img = document.getElementById('stage-img');  
-    const empty = document.getElementById('stage-empty');  
-    if (!items.length) {  
-      img.style.display = 'none';  
-      empty.style.display = 'inline';  
-      document.getElementById('item-counter').textContent = '未匯入相片（0 / 0）';  
-      document.getElementById('item-time').textContent = '—';  
-      return;  
-    }  
-  
-    const it = items[currentIndex];  
-    document.getElementById('item-counter').textContent = `第 ${currentIndex + 1} / ${items.length} 張（#${it.seq}）`;  
-    document.getElementById('item-time').textContent = it.timeLabel || '—';  
-  
-    if (it.photo) {  
-      img.src = it.photo;  
-      img.style.display = 'block';  
-      img.style.transform = `rotate(${currentRot}deg)`;  
-      empty.style.display = 'none';  
-    } else {  
-      img.style.display = 'none';  
-      empty.style.display = 'inline';  
-      empty.textContent = '此紀錄冇相片資料';  
-    }  
-  
-    document.getElementById('m-door').value = it.door || 1;  
-    document.getElementById('m-barcode').value = it.barcode || '';  
-    document.getElementById('m-po').value = it.po || '';  
-    document.getElementById('m-grn').value = it.grn || '';  
-    document.getElementById('m-dept').value = it.dept || '';  
-    document.getElementById('m-req').value = it.requestor || '';  
-  }  
-  
-  function updateCurrentField(key, val) {  
-    if (!items.length) return;  
-    items[currentIndex][key] = val;  
-    renderTable();  
-  }  
-  
-  function rotateStage(deg) {  
-    currentRot = (currentRot + deg + 360) % 360;  
-    const img = document.getElementById('stage-img');  
-    if (img.style.display !== 'none') {  
-      img.style.transform = `rotate(${currentRot}deg)`;  
-    }  
-  }  
-  
-  function prevItem() {  
-    if (!items.length) return;  
-    currentIndex = (currentIndex - 1 + items.length) % items.length;  
-    currentRot = 0;  
-    renderCurrent();  
-    renderTable();  
-  }  
-  
-  function nextItem() {  
-    if (!items.length) return;  
-    currentIndex = (currentIndex + 1) % items.length;  
-    currentRot = 0;  
-    renderCurrent();  
-    renderTable();  
-  }  
-  
-  function renderTable() {  
-    const tbody = document.getElementById('summary-tbody');  
-    tbody.innerHTML = '';  
-    items.forEach((it, idx) => {  
-      const tr = document.createElement('tr');  
-      if (idx === currentIndex) tr.className = 'active-row';  
-      tr.style.cursor = 'pointer';  
-      tr.onclick = () => {  
-        currentIndex = idx;  
-        currentRot = 0;  
-        renderCurrent();  
-        renderTable();  
-      };  
-      tr.innerHTML = `  
-        <td>${it.seq}</td>  
-        <td>${it.timeLabel || '—'}</td>  
-        <td>Door #${String(it.door || 1).padStart(2, '0')}</td>  
-        <td>${it.barcode || '—'}</td>  
-        <td>${it.po || '—'}</td>  
-        <td>${it.grn || '—'}</td>  
-        <td>${it.dept || '—'}</td>  
-        <td>${it.requestor || '—'}</td>  
-      `;  
-      tbody.appendChild(tr);  
-    });  
-  }  
-  
-  function exportMappedCsv() {  
-    if (!items.length) return alert('未有資料可以匯出。');  
-    const headers = ['Seq', 'Time', 'Door', 'Barcode', 'PO', 'GRN', 'Department', 'Requestor'];  
-    const rows = items.map(it => [  
-      it.seq, it.timeLabel || '', it.door || '', it.barcode || '', it.po || '', it.grn || '', it.dept || '', it.requestor || ''  
-    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));  
-    const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n');  
-    const a = document.createElement('a');  
-    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));  
-    a.download = `Admin_Mapped_Cabinet_${new Date().toISOString().slice(0, 10)}.csv`;  
-    a.click();  
-  }  
-  
-  initDoorSelect();  
-</script>  
-</body>  
-</html>  
+<!DOCTYPE html>
+<html lang="zh-HK">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Runner 入櫃（影相 + Scan Bin + Capture PO）</title>
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <script src="https://unpkg.com/@zxing/library@0.21.2/umd/index.min.js"></script>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --card-light: #334155;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --green: #22c55e;
+      --amber: #f59e0b;
+      --red: #ef4444;
+      --border: #475569;
+    }
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft JhengHei", sans-serif; }
+    body { margin: 0; background: var(--bg); color: var(--text); padding: 14px; }
+
+    .wrap { max-width: 660px; margin: 0 auto; }
+    .top-bar {
+      display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap;
+      background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 12px 16px; margin-bottom: 14px;
+    }
+    .top-bar h1 { margin: 0; font-size: 1.2rem; }
+    .pills { display: flex; gap: 8px; flex-wrap: wrap; }
+    .pill { background: var(--card-light); padding: 6px 12px; border-radius: 999px; font-size: 0.9rem; font-weight: 800; color: var(--accent); }
+    .pill.warn { color: #fde68a; background: rgba(245, 158, 11, 0.2); }
+
+    .box {
+      background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 16px; margin-bottom: 14px;
+    }
+    h2 { margin: 0 0 10px; font-size: 1.12rem; }
+
+    .btn-scan {
+      width: 100%; padding: 16px; border-radius: 12px; border: none;
+      background: var(--accent); color: #082f49; font-size: 1.2rem; font-weight: 900;
+      cursor: pointer; margin-bottom: 10px;
+    }
+
+    .photo-btn {
+      display: flex; align-items: center; justify-content: center; gap: 10px;
+      width: 100%; padding: 18px 14px; border-radius: 12px; border: 2px dashed var(--accent);
+      background: rgba(56, 189, 248, 0.12); color: #fff; font-size: 1.2rem; font-weight: 800; cursor: pointer;
+    }
+
+    .preview-img {
+      width: 100%; max-height: 250px; object-fit: contain; border-radius: 10px;
+      margin-top: 12px; background: #000; display: none; border: 1px solid var(--border);
+    }
+
+    .status-text { margin-top: 10px; font-size: 0.95rem; color: var(--amber); font-weight: 700; min-height: 22px; }
+
+    label { display: block; font-size: 0.95rem; font-weight: 700; margin-bottom: 5px; color: #e2e8f0; }
+    input[type="text"] {
+      width: 100%; padding: 12px 13px; font-size: 1.08rem; border-radius: 10px;
+      border: 2px solid var(--border); background: #0f172a; color: #fff;
+    }
+    input[type="text"]:focus { outline: none; border-color: var(--accent); }
+
+    .field-gap { margin-top: 12px; }
+
+    .btn-save {
+      width: 100%; padding: 18px; font-size: 1.3rem; font-weight: 900; border-radius: 12px;
+      border: none; background: var(--green); color: #052e16; cursor: pointer; margin-top: 14px;
+    }
+
+    .sub-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+    .btn-sub {
+      padding: 12px; font-size: 0.98rem; font-weight: 700; border-radius: 10px;
+      border: 1px solid var(--border); background: var(--card-light); color: #fff; cursor: pointer;
+    }
+    .btn-clear {
+      margin-top: 10px; width: 100%; padding: 11px; font-size: 0.95rem; font-weight: 700;
+      border-radius: 10px; border: 1px solid rgba(239, 68, 68, 0.5); background: rgba(239, 68, 68, 0.12);
+      color: #fca5a5; cursor: pointer;
+    }
+
+    .recent-list { margin-top: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .recent-item {
+      background: #0f172a; border: 1px solid var(--border); border-radius: 12px; padding: 10px 12px;
+      display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    }
+    .recent-left { display: flex; align-items: center; gap: 12px; }
+    .recent-thumb {
+      width: 56px; height: 56px; object-fit: cover; border-radius: 8px;
+      border: 1px solid var(--border); background: #000; flex-shrink: 0;
+    }
+    .btn-del {
+      padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border);
+      background: var(--card-light); color: #fca5a5; font-weight: 700; cursor: pointer;
+    }
+
+    .scan-modal {
+      position: fixed; inset: 0; background: rgba(2, 6, 23, 0.92); z-index: 999;
+      display: none; flex-direction: column; align-items: center; justify-content: center; padding: 16px;
+    }
+    .scan-modal.open { display: flex; }
+    .scan-card {
+      width: 100%; max-width: 500px; background: var(--card); border: 1px solid var(--border);
+      border-radius: 14px; padding: 16px; text-align: center;
+    }
+    #scan-video { width: 100%; max-height: 320px; border-radius: 10px; background: #000; object-fit: cover; }
+    .btn-close-scan {
+      margin-top: 12px; width: 100%; padding: 12px; border-radius: 10px; border: none;
+      background: var(--red); color: #fff; font-size: 1rem; font-weight: 800; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <div class="top-bar">
+    <h1>📦 Runner 入櫃（影相 + Scan Bin + PO）</h1>
+    <div class="pills">
+      <div class="pill" id="count-pill">已記: 0 筆</div>
+      <div class="pill warn" id="size-pill">佔用: 0.0 MB</div>
+    </div>
+  </div>
+
+  <div class="box">
+    <h2>1. Scan Bin + 影相 + Capture PO</h2>
+
+    <button class="btn-scan" type="button" onclick="openScanner()">
+      🔦 Scan Bin 碼
+    </button>
+
+    <label class="photo-btn" for="photo-input">
+      📸 影相 / 揀相（留底 + 自動捉 PO）
+    </label>
+    <input type="file" id="photo-input" accept="image/*" capture="environment" hidden />
+    <img id="photo-preview" class="preview-img" alt="相片預覽" />
+
+    <div class="status-text" id="status-text"></div>
+
+    <div class="field-gap">
+      <label for="f-bin">Bin 號碼（Scan 或輸入；若掃長碼可自動取尾兩位 1–96）</label>
+      <input type="text" id="f-bin" placeholder="例如: 32 或掃描條碼" oninput="normalizeBinInput()" />
+    </div>
+
+    <div class="field-gap">
+      <label for="f-po">PO Number</label>
+      <input type="text" id="f-po" placeholder="影相後自動捉 P/O no:，亦可手動填" />
+    </div>
+
+    <button class="btn-save" type="button" onclick="saveRecord()">✅ 儲存呢筆紀錄</button>
+  </div>
+
+  <div class="box">
+    <h2>📋 已記紀錄（交俾 Admin）</h2>
+    <div class="sub-actions">
+      <button class="btn-sub" type="button" onclick="exportJson()">💾 匯出 JSON（含相片）</button>
+      <button class="btn-sub" type="button" onclick="exportCsv()">📊 匯出 CSV 清單</button>
+    </div>
+    <button class="btn-clear" type="button" onclick="clearAll()">🗑️ 交收完成，清空本機紀錄</button>
+    <div class="recent-list" id="recent-list"></div>
+  </div>
+</div>
+
+<div class="scan-modal" id="scan-modal">
+  <div class="scan-card">
+    <h2 style="margin-top:0;">🔦 對準 Bin 條碼 / QR Code</h2>
+    <video id="scan-video" playsinline autoplay muted></video>
+    <div class="status-text" id="scan-status">正在啟動鏡頭...</div>
+    <button class="btn-close-scan" type="button" onclick="closeScanner()">✕ 關閉鏡頭</button>
+  </div>
+</div>
+
+<script>
+  const DB_NAME = 'RunnerBinPoDb_v1';
+  const STORE_NAME = 'records';
+  let db = null;
+  let records = [];
+  let draftPhoto = '';
+
+  let codeReader = null;
+  let scanStream = null;
+  let scanTimer = null;
+
+  function openDb() {
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open(DB_NAME, 1);
+      req.onupgradeneeded = e => {
+        const database = e.target.result;
+        if (!database.objectStoreNames.contains(STORE_NAME)) {
+          database.createObjectStore(STORE_NAME, { keyPath: 'id' });
+        }
+      };
+      req.onsuccess = e => { db = e.target.result; resolve(db); };
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+
+  function getAllRecords() {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const req = tx.objectStore(STORE_NAME).getAll();
+      req.onsuccess = () => resolve((req.result || []).sort((a, b) => b.id - a.id));
+      req.onerror = e => reject(e.target.error);
+    });
+  }
+
+  function putRecord(rec) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).put(rec);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
+    });
+  }
+
+  function deleteRecord(id) {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).delete(id);
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
+    });
+  }
+
+  function clearAllRecords() {
+    return new Promise((resolve, reject) => {
+      const tx = db.transaction(STORE_NAME, 'readwrite');
+      tx.objectStore(STORE_NAME).clear();
+      tx.oncomplete = () => resolve();
+      tx.onerror = e => reject(e.target.error);
+    });
+  }
+
+  // 若輸入較長數字條碼，自動取尾兩位（1–96）做 Bin 號；若本身係 1–96 就保留
+  function normalizeBinInput() {
+    const el = document.getElementById('f-bin');
+    const digits = el.value.replace(/\D/g, '');
+    if (!digits) return;
+    if (digits.length >= 4) {
+      const lastTwo = parseInt(digits.slice(-2), 10);
+      if (lastTwo >= 1 && lastTwo <= 96) {
+        el.value = String(lastTwo);
+      }
+    }
+  }
+
+  async function openScanner() {
+    const modal = document.getElementById('scan-modal');
+    const st = document.getElementById('scan-status');
+    const video = document.getElementById('scan-video');
+    modal.classList.add('open');
+    st.textContent = '正在啟動鏡頭...';
+
+    try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        st.textContent = '⚠️ 無法啟動鏡頭，請直接喺 Bin 號碼格輸入';
+        return;
+      }
+      scanStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' } },
+        audio: false
+      });
+      video.srcObject = scanStream;
+      await video.play();
+      st.textContent = '掃描中...';
+
+      let nativeDet = null;
+      if ('BarcodeDetector' in window) {
+        try { nativeDet = new BarcodeDetector(); } catch (_) { nativeDet = null; }
+      }
+      if (!nativeDet && window.ZXing) {
+        codeReader = new ZXing.BrowserMultiFormatReader();
+      }
+
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+
+      scanTimer = setInterval(async () => {
+        if (!video.videoWidth || !video.videoHeight) return;
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        ctx.drawImage(video, 0, 0);
+
+        let code = '';
+        if (nativeDet) {
+          try {
+            const list = await nativeDet.detect(canvas);
+            if (list && list.length && list[0].rawValue) code = list[0].rawValue.trim();
+          } catch (_) {}
+        }
+        if (!code && codeReader) {
+          try {
+            const res = await codeReader.decodeFromImageUrl(canvas.toDataURL('image/jpeg', 0.8));
+            if (res && res.text) code = res.text.trim();
+          } catch (_) {}
+        }
+
+        if (code) {
+          document.getElementById('f-bin').value = code;
+          normalizeBinInput();
+          document.getElementById('status-text').textContent = `✅ 已 Scan Bin：${document.getElementById('f-bin').value}`;
+          closeScanner();
+        }
+      }, 350);
+    } catch (_) {
+      st.textContent = '⚠️ 鏡頭權限未開或非 HTTPS，可直接輸入 Bin 號碼';
+    }
+  }
+
+  function closeScanner() {
+    clearInterval(scanTimer);
+    scanTimer = null;
+    if (scanStream) {
+      scanStream.getTracks().forEach(t => t.stop());
+      scanStream = null;
+    }
+    if (codeReader) {
+      try { codeReader.reset(); } catch (_) {}
+      codeReader = null;
+    }
+    document.getElementById('scan-video').srcObject = null;
+    document.getElementById('scan-modal').classList.remove('open');
+  }
+
+  function compressImage(file, maxWidth = 1150, quality = 0.72) {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const img = new Image();
+        img.onload = () => {
+          const scale = img.width > maxWidth ? maxWidth / img.width : 1;
+          const canvas = document.createElement('canvas');
+          canvas.width = Math.round(img.width * scale);
+          canvas.height = Math.round(img.height * scale);
+          canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+          resolve(canvas.toDataURL('image/jpeg', quality));
+        };
+        img.onerror = reject;
+        img.src = e.target.result;
+      };
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function rotateDataUrl(dataUrl, deg) {
+    return new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const c = document.createElement('canvas');
+        if (deg === 90 || deg === 270) {
+          c.width = img.height;
+          c.height = img.width;
+        } else {
+          c.width = img.width;
+          c.height = img.height;
+        }
+        const ctx = c.getContext('2d');
+        ctx.translate(c.width / 2, c.height / 2);
+        ctx.rotate((deg * Math.PI) / 180);
+        ctx.drawImage(img, -img.width / 2, -img.height / 2);
+        resolve(c.toDataURL('image/jpeg', 0.8));
+      };
+      img.src = dataUrl;
+    });
+  }
+
+  function extractPoFromText(text) {
+    if (!text) return '';
+    const cleaned = text.replace(/[Oo]/g, '0').replace(/[Il|]/g, '1');
+    const lines = cleaned.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    for (let i = 0; i < lines.length; i++) {
+      if (/P\/?O\s*no\.?/i.test(lines[i])) {
+        const after = lines[i].replace(/.*?P\/?O\s*no\.?[:#\s-]*/i, '').trim();
+        const m1 = after.match(/\b([0-9]{6,14})\b/) || after.match(/[0-9A-Za-z-]{5,20}/);
+        if (m1) return m1[1] || m1[0];
+        if (i + 1 < lines.length) {
+          const m2 = lines[i + 1].match(/\b([0-9]{6,14})\b/) || lines[i + 1].match(/[0-9A-Za-z-]{5,20}/);
+          if (m2) return m2[1] || m2[0];
+        }
+      }
+    }
+    return '';
+  }
+
+  async function tryCapturePo(dataUrl) {
+    if (document.getElementById('f-po').value.trim()) return;
+    if (typeof Tesseract === 'undefined' || !Tesseract.recognize) return;
+
+    const st = document.getElementById('status-text');
+    st.textContent = '⏳ 相片已留底，正在嘗試捉 PO Number...';
+
+    try {
+      for (const deg of [90, 270, 0]) {
+        const target = deg === 0 ? dataUrl : await rotateDataUrl(dataUrl, deg);
+        const res = await Tesseract.recognize(target, 'eng');
+        const po = extractPoFromText(res.data?.text || '');
+        if (po) {
+          document.getElementById('f-po').value = po;
+          st.textContent = `✅ 已捉出 PO：${po}`;
+          return;
+        }
+      }
+      st.textContent = 'ℹ️ 相片已留底（未自動捉到 PO，可手動填或直接存檔）';
+    } catch (_) {
+      st.textContent = 'ℹ️ 相片已留底（可直接填寫或按儲存）';
+    }
+  }
+
+  document.getElementById('photo-input').addEventListener('change', async e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    draftPhoto = await compressImage(file, 1150, 0.72);
+    const img = document.getElementById('photo-preview');
+    img.src = draftPhoto;
+    img.style.display = 'block';
+    await tryCapturePo(draftPhoto);
+  });
+
+  async function saveRecord() {
+    const bin = document.getElementById('f-bin').value.trim();
+    const po = document.getElementById('f-po').value.trim();
+
+    if (!bin && !po && !draftPhoto) {
+      return alert('請最少 Scan/輸入 Bin 號碼、填 PO 或影一張相！');
+    }
+
+    const now = new Date();
+    const approxBytes = draftPhoto ? Math.round((draftPhoto.length * 3) / 4) : 0;
+    const rec = {
+      id: Date.now(),
+      timeIso: now.toISOString(),
+      timeLabel: now.toLocaleTimeString('zh-HK', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      bin,
+      po,
+      bytes: approxBytes,
+      photo: draftPhoto
+    };
+
+    try {
+      await putRecord(rec);
+    } catch (_) {
+      alert('⚠️ 本機儲存空間已滿，請先匯出 JSON 並按「清空本機紀錄」！');
+      return;
+    }
+
+    document.getElementById('f-bin').value = '';
+    document.getElementById('f-po').value = '';
+    document.getElementById('status-text').textContent = '';
+    document.getElementById('photo-preview').style.display = 'none';
+    document.getElementById('photo-input').value = '';
+    draftPhoto = '';
+
+    records = await getAllRecords();
+    renderList();
+  }
+
+  async function removeOne(id) {
+    await deleteRecord(id);
+    records = await getAllRecords();
+    renderList();
+  }
+
+  async function clearAll() {
+    if (!records.length) return;
+    if (!confirm('確定已匯出並交收完成，要清空本機所有紀錄嗎？')) return;
+    await clearAllRecords();
+    records = [];
+    renderList();
+  }
+
+  function renderList() {
+    const totalBytes = records.reduce((s, r) => s + (r.bytes || 0), 0);
+    const mb = (totalBytes / (1024 * 1024)).toFixed(1);
+    document.getElementById('count-pill').textContent = `已記: ${records.length} 筆`;
+    document.getElementById('size-pill').textContent = `佔用: ${mb} MB`;
+
+    const list = document.getElementById('recent-list');
+    list.innerHTML = '';
+
+    records.forEach((item, idx) => {
+      const seq = records.length - idx;
+      const div = document.createElement('div');
+      div.className = 'recent-item';
+      div.innerHTML = `
+        <div class="recent-left">
+          ${item.photo ? `<img class="recent-thumb" src="${item.photo}" alt="#${seq}" />` : ''}
+          <div>
+            <div style="font-weight:800; font-size:1rem;">#${seq} · Bin: ${item.bin || '—'} · PO: ${item.po || '—'}</div>
+            <div style="color:var(--muted); font-size:0.86rem;">${item.timeLabel}</div>
+          </div>
+        </div>
+        <button class="btn-del" type="button" onclick="removeOne(${item.id})">刪除</button>
+      `;
+      list.appendChild(div);
+    });
+  }
+
+  function exportJson() {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' }));
+    a.download = `Runner_Bin_PO_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+  }
+
+  function exportCsv() {
+    const headers = ['Seq', 'Time', 'Bin', 'PO', 'Has_Photo'];
+    const rows = records.map((r, idx) => [
+      records.length - idx, r.timeLabel, r.bin || '', r.po || '', r.photo ? 'YES' : 'NO'
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    const csv = '\uFEFF' + [headers.join(','), ...rows].join('\n');
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8;' }));
+    a.download = `Runner_Bin_PO_${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+  }
+
+  (async function init() {
+    await openDb();
+    records = await getAllRecords();
+    renderList();
+  })();
+</script>
+</body>
+</html>

@@ -3,1624 +3,429 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GRN Batch OCR (1–100) — PO, Requester, Item Code & Door Link</title>
+  <title>GRN OCR & Door Dispatch (Simple)</title>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-      background: #f1f5f9;
-      color: #0f172a;
-      padding: 14px;
-    }
-    .app { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
-    .bar {
-      background: #0f172a;
-      color: #fff;
-      padding: 12px 16px;
-      border-radius: 10px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-    .bar h1 { font-size: 15px; font-weight: 700; }
-    .sub { font-size: 11px; color: #94a3b8; }
-    .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-    button {
-      cursor: pointer;
-      border: none;
-      border-radius: 7px;
-      padding: 8px 12px;
-      font-size: 12px;
-      font-weight: 600;
-      transition: opacity 0.15s ease;
-    }
-    button:hover:not(:disabled) { opacity: 0.9; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; color: #0f172a; padding: 14px; }
+    .app { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .top { background: #0f172a; color: #fff; padding: 12px 16px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; }
+    .top h1 { font-size: 15px; }
+    .btns { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+    button { border: none; border-radius: 7px; padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer; }
     button:disabled { opacity: 0.45; cursor: not-allowed; }
-    .btn-blue { background: #2563eb; color: #fff; }
-    .btn-green { background: #10b981; color: #052e16; }
-    .btn-amber { background: #f59e0b; color: #1e1b4b; }
-    .btn-light { background: #e2e8f0; color: #0f172a; }
-    .btn-dark { background: #1e293b; color: #fff; }
-    .grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 12px; }
-    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
-    .card {
-      background: #fff;
-      border: 1px solid #cbd5e1;
-      border-radius: 10px;
-      padding: 12px;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-    }
-    .preview-box {
-      position: relative;
-      background: #0f172a;
-      border-radius: 8px;
-      height: 330px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      overflow: hidden;
-      color: #94a3b8;
-      font-size: 12px;
-    }
-    .preview-stage {
-      position: relative;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      max-width: 100%;
-      max-height: 100%;
-    }
-    .preview-stage canvas {
-      max-width: 100%;
-      max-height: 330px;
-      width: auto;
-      height: auto;
-      display: block;
-    }
-    .highlight-box {
-      position: absolute;
-      border: 2.5px solid #ef4444;
-      background: rgba(239, 68, 68, 0.18);
-      pointer-events: none;
-      border-radius: 2px;
-    }
+    .blue { background: #2563eb; color: #fff; }
+    .green { background: #10b981; color: #052e16; }
+    .amber { background: #f59e0b; color: #111827; }
+    .light { background: #e2e8f0; color: #0f172a; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
+    .card { background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .stage-wrap { position: relative; background: #0f172a; border-radius: 8px; height: 310px; display: flex; align-items: center; justify-content: center; overflow: hidden; color: #94a3b8; font-size: 12px; }
+    .stage { position: relative; display: inline-flex; max-width: 100%; max-height: 100%; }
+    .stage canvas { max-width: 100%; max-height: 310px; display: block; }
+    .red-box { position: absolute; border: 2.5px solid #ef4444; background: rgba(239, 68, 68, 0.2); pointer-events: none; }
     .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-    @media (max-width: 560px) { .row-2 { grid-template-columns: 1fr; } }
     label { display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px; }
-    input {
-      width: 100%;
-      padding: 8px 10px;
-      border: 1px solid #94a3b8;
-      border-radius: 7px;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-      font-size: 13px;
-    }
-    .pw-scan-group {
-      display: flex;
-      gap: 6px;
-      align-items: stretch;
-    }
-    .pw-scan-group input {
-      flex: 1;
-      min-width: 0;
-    }
-    .scan-field-panel {
-      border: 1.5px solid #38bdf8;
-      background: #f0f9ff;
-      border-radius: 9px;
-      padding: 10px;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-    .scan-field-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 8px;
-      flex-wrap: wrap;
-    }
-    .scan-field-badge {
-      font-size: 11px;
-      font-weight: 800;
-      background: #e0f2fe;
-      color: #0369a1;
-      padding: 3px 8px;
-      border-radius: 999px;
-    }
-    .scan-video-wrap {
-      position: relative;
-      width: 100%;
-      height: 210px;
-      border-radius: 10px;
-      overflow: hidden;
-      background: #000;
-    }
-    .scan-video-wrap video {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      display: block;
-    }
-    .scan-reticle {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      width: 86%;
-      height: 96px;
-      border: 2.5px solid #38bdf8;
-      border-radius: 10px;
-      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
-      pointer-events: none;
-    }
-    .scan-laser {
-      position: absolute;
-      top: 50%;
-      left: 6%;
-      right: 6%;
-      height: 2px;
-      background: #ef4444;
-      box-shadow: 0 0 8px #ef4444;
-      animation: laserScan 1.6s infinite ease-in-out;
-    }
-    @keyframes laserScan {
-      0%, 100% { transform: translateY(-30px); }
-      50% { transform: translateY(30px); }
-    }
-    .door-box {
-      background: #fef08a;
-      border-color: #eab308;
-      font-weight: 800;
-      text-align: center;
-      font-size: 16px;
-    }
-    .item-code-input {
-      color: #dc2626;
-      font-weight: 700;
-      border-color: #fca5a5;
-      background: #fef2f2;
-    }
-    .item-red {
-      color: #dc2626;
-      font-weight: 700;
-      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-    }
-    .status {
-      font-size: 12px;
-      color: #1e293b;
-      background: #f8fafc;
-      border: 1px solid #e2e8f0;
-      padding: 8px 10px;
-      border-radius: 7px;
-      line-height: 1.4;
-    }
-    .check-banner {
-      font-size: 12px;
-      padding: 8px 10px;
-      border-radius: 7px;
-      line-height: 1.45;
-      border: 1px solid #cbd5e1;
-      background: #f8fafc;
-      color: #1e293b;
-    }
-    .check-ok {
-      background: #ecfdf5;
-      border-color: #34d399;
-      color: #065f46;
-      font-weight: 600;
-    }
-    .check-warn {
-      background: #fffbeb;
-      border-color: #fbbf24;
-      color: #92400e;
-      font-weight: 600;
-    }
-    .flag-pill {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 999px;
-      font-size: 11px;
-      font-weight: 700;
-    }
-    .flag-ok { background: #d1fae5; color: #065f46; }
-    .flag-warn { background: #fef3c7; color: #92400e; }
-    .progress-track {
-      width: 100%;
-      height: 7px;
-      background: #e2e8f0;
-      border-radius: 999px;
-      overflow: hidden;
-    }
-    .progress-fill {
-      height: 100%;
-      width: 0%;
-      background: #2563eb;
-      transition: width 0.2s ease;
-    }
-    .table-wrap {
-      background: #fff;
-      border: 1px solid #cbd5e1;
-      border-radius: 10px;
-      overflow-x: auto;
-    }
+    input { width: 100%; padding: 8px 10px; border: 1px solid #94a3b8; border-radius: 7px; font-family: ui-monospace, monospace; font-size: 13px; }
+    .door { background: #fef08a; border-color: #eab308; font-weight: 800; font-size: 16px; text-align: center; }
+    .red-text { color: #dc2626; font-weight: 700; border-color: #fca5a5; background: #fef2f2; }
+    .msg { font-size: 12px; background: #f8fafc; border: 1px solid #e2e8f0; padding: 8px 10px; border-radius: 7px; }
+    .table-box { background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; overflow-x: auto; }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td {
-      padding: 8px 10px;
-      border-bottom: 1px solid #e2e8f0;
-      text-align: left;
-      vertical-align: top;
-    }
-    th { background: #f8fafc; font-weight: 700; color: #334155; }
+    th, td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    th { background: #f8fafc; }
     tr.active { background: #eff6ff; }
-    .hidden { display: none !important; }
-    details.raw-box { font-size: 11px; color: #475569; }
-    details.raw-box pre {
-      margin-top: 6px;
-      max-height: 110px;
-      overflow: auto;
-      background: #0f172a;
-      color: #e2e8f0;
-      padding: 8px;
-      border-radius: 6px;
-      white-space: pre-wrap;
-      word-break: break-word;
-    }
+    .hidden { display: none; }
   </style>
 </head>
 <body>
-  <input type="file" id="photoInput" accept="image/*" multiple class="hidden" />
-  <input type="file" id="nativeBarcodePhotoInput" accept="image/*" capture="environment" class="hidden" />
+  <input type="file" id="fileInput" accept="image/*" multiple class="hidden" />
 
   <div class="app">
-    <div class="bar">
+    <div class="top">
       <div>
-        <h1>GRN Batch OCR & Barcode Scanner (1–100)</h1>
-        <div class="sub">Captures PO (3401...), Requester, Item Codes (Red Highlight), and Scanner Password → Last 2 Digits = Door #</div>
+        <h1>GRN OCR &amp; Door Dispatch (Simple)</h1>
       </div>
-      <div class="actions">
-        <button id="btnAddPhoto" class="btn-blue">+ Insert GRNs (1–100)</button>
-        <button id="btnScanAll" class="btn-amber">Scan All</button>
-        <button id="btnStopScan" class="btn-light" disabled>Stop</button>
-        <button id="btnExportXlsx" class="btn-green">Export .xlsx</button>
-        <button id="btnExportCsv" class="btn-light">Export .csv</button>
+      <div class="btns">
+        <button id="btnLoad" class="blue">+ Load GRNs (1–100)</button>
+        <button id="btnScanAll" class="amber">Scan All</button>
+        <button id="btnStop" class="light" disabled>Stop</button>
+        <button id="btnExport" class="green">Export Excel</button>
       </div>
-    </div>
-
-    <div class="progress-track">
-      <div id="progressFill" class="progress-fill"></div>
     </div>
 
     <div class="grid">
       <div class="card">
-        <div class="preview-box" id="previewBox">No GRN photos inserted</div>
-        <div class="actions">
-          <button id="btnRotate" class="btn-light">↻ Rotate 90°</button>
-          <button id="btnScanNow" class="btn-blue">Scan Current</button>
-          <button id="btnScanCurrentPhotoBarcode" class="btn-amber">🔎 Scan Current Photo Barcode</button>
-          <button id="btnPrev" class="btn-light">Prev</button>
-          <button id="btnNext" class="btn-light">Next</button>
-          <span id="photoCounter" style="margin-left:auto; font-size:12px; color:#64748b; font-weight:600;">0 / 0</span>
+        <div id="stageWrap" class="stage-wrap">No GRN images loaded</div>
+        <div class="btns">
+          <button id="btnRotate" class="light">↻ 90°</button>
+          <button id="btnScanOne" class="blue">Scan Current</button>
+          <button id="btnPrev" class="light">Prev</button>
+          <button id="btnNext" class="light">Next</button>
+          <span id="counter" style="margin-left:auto; font-size:12px; font-weight:600; color:#64748b;">0 / 0</span>
         </div>
-        <div class="status" id="statusMsg">Insert GRN photos (up to 100 at once) to begin scanning.</div>
-        <div class="check-banner" id="captureCheckBox">Runner photo check: insert a GRN photo to verify capture quality, barcode vs. OCR match, and completeness.</div>
-        <details class="raw-box">
-          <summary>View Raw OCR Text (for tuning)</summary>
-          <pre id="rawOcrPreview"></pre>
-        </details>
+        <div id="msg" class="msg">Load GRN images (up to 100). Scanner input auto-maps the last 2 digits to Door #.</div>
       </div>
 
       <div class="card">
         <div class="row-2">
           <div>
-            <label for="pwInput">1. Scanner Password (9 digits)</label>
-            <div class="pw-scan-group">
-              <input id="pwInput" type="text" inputmode="numeric" placeholder="Scan barcode or type 9 digits" />
-              <button id="btnToggleBarcodeCam" type="button" class="btn-blue">📷 Scan</button>
-              <button id="btnFromLoadedPhoto" type="button" class="btn-amber" title="Scan barcode from currently loaded GRN photo">🖼️</button>
-              <button id="btnNativeBarcodeCam" type="button" class="btn-light" title="Capture barcode photo">📸</button>
-            </div>
+            <label for="pw">Password (Scanner / Type)</label>
+            <input id="pw" type="text" inputmode="numeric" placeholder="Scan or enter password" />
           </div>
           <div>
-            <label for="doorInput">Door # (Auto Last 2 Digits)</label>
-            <input id="doorInput" type="text" class="door-box" placeholder="--" maxlength="2" />
-          </div>
-        </div>
-
-        <div id="barcodeScanField" class="scan-field-panel hidden">
-          <div class="scan-field-header">
-            <span id="barcodeEngineBadge" class="scan-field-badge">⚡ Ready</span>
-            <div class="actions">
-              <button id="btnCloseBarcodeCam" type="button" class="btn-dark" style="padding:5px 10px; font-size:11px;">Close Cam</button>
-            </div>
-          </div>
-          <div class="scan-video-wrap">
-            <video id="barcodeVideo" autoplay muted playsinline></video>
-            <div class="scan-reticle">
-              <div class="scan-laser"></div>
-            </div>
-          </div>
-          <div id="barcodeScanMsg" style="font-size:12px; font-weight:700; color:#0f172a; text-align:center;">
-            Align barcode inside the blue frame to fill Password &amp; Door #
+            <label for="door">Door # (Last 2 Digits)</label>
+            <input id="door" type="text" class="door" maxlength="2" placeholder="--" />
           </div>
         </div>
 
         <div class="row-2">
           <div>
-            <label for="poInput">2. PO Number (3401...)</label>
-            <input id="poInput" type="text" placeholder="3401xxxxxx" />
+            <label for="po">PO Number (3401...)</label>
+            <input id="po" type="text" placeholder="3401xxxxxx" />
           </div>
           <div>
-            <label for="reqInput">3. Requester</label>
-            <input id="reqInput" type="text" placeholder="e.g. martin.tai or 08xxxxxx" />
+            <label for="pr">PR / Requester</label>
+            <input id="pr" type="text" placeholder="PR # or Requester" />
           </div>
         </div>
+
         <div>
-          <label for="itemInput">4. Item Code(s) — Highlighted in Red (comma-separated)</label>
-          <input id="itemInput" type="text" class="item-code-input" placeholder="e.g. XF28100109, XA02100058" />
+          <label for="items">Item Code(s) — Highlighted in Red</label>
+          <input id="items" type="text" class="red-text" placeholder="e.g. XF28100109, XA02100058" />
         </div>
-        <div class="actions">
-          <button id="btnSaveNext" class="btn-green">Confirm & Next</button>
-          <button id="btnClearFields" class="btn-light">Clear Fields</button>
-          <button id="btnDelete" class="btn-light">Delete</button>
+
+        <div>
+          <label for="buEmail">BU Email (for Outlook)</label>
+          <input id="buEmail" type="email" placeholder="bu-team@company.com" />
+        </div>
+
+        <div class="btns">
+          <button id="btnSaveNext" class="green">Save &amp; Next</button>
+          <button id="btnOutlook" class="blue">Open in Outlook</button>
+          <button id="btnCopy" class="light">Copy Summary</button>
+          <button id="btnDelete" class="light">Delete</button>
         </div>
       </div>
     </div>
 
-    <div class="table-wrap">
+    <div class="table-box">
       <table>
         <thead>
           <tr>
             <th>#</th>
-            <th>Photo</th>
+            <th>File</th>
             <th>Password</th>
             <th>Door #</th>
-            <th>PO Number</th>
-            <th>Requester</th>
-            <th>Item Code (Red)</th>
-            <th>Capture Check</th>
+            <th>PO</th>
+            <th>PR / Requester</th>
+            <th>Item Codes</th>
             <th>Status</th>
           </tr>
         </thead>
-        <tbody id="tableBody">
-          <tr><td colspan="9" style="text-align:center; color:#94a3b8; padding:18px;">No GRN records yet</td></tr>
+        <tbody id="tbody">
+          <tr><td colspan="8" style="text-align:center; color:#94a3b8; padding:16px;">No records</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
   <script>
-    const CONFIG = {
-      poPrefix: "3401",
-      poLength: 10,
-      passwordLength: 9,
-      maxBatchSize: 100
-    };
+    const state = { rows: [], idx: -1, worker: null, running: false, stop: false };
+    const $ = id => document.getElementById(id);
+    const cur = () => state.rows[state.idx] || null;
 
-    const REQUIRED_BARCODE_FORMATS = ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "codabar", "itf", "qr_code"];
-    const MAX_NATIVE_DETECT_ERRORS = 3;
-
-    const state = {
-      items: [],
-      activeIndex: -1,
-      worker: null,
-      scanning: false,
-      stopRequested: false,
-      barcodeCamActive: false,
-      barcodeStream: null,
-      barcodeLoopTimer: null,
-      barcodeDecodingFrame: false,
-      zxingReader: null,
-      barcodeHandled: false
-    };
-
-    const el = {
-      photoInput: document.getElementById("photoInput"),
-      nativeBarcodePhotoInput: document.getElementById("nativeBarcodePhotoInput"),
-      previewBox: document.getElementById("previewBox"),
-      photoCounter: document.getElementById("photoCounter"),
-      statusMsg: document.getElementById("statusMsg"),
-      captureCheckBox: document.getElementById("captureCheckBox"),
-      rawOcrPreview: document.getElementById("rawOcrPreview"),
-      progressFill: document.getElementById("progressFill"),
-      pwInput: document.getElementById("pwInput"),
-      doorInput: document.getElementById("doorInput"),
-      poInput: document.getElementById("poInput"),
-      reqInput: document.getElementById("reqInput"),
-      itemInput: document.getElementById("itemInput"),
-      tableBody: document.getElementById("tableBody"),
-      btnScanAll: document.getElementById("btnScanAll"),
-      btnStopScan: document.getElementById("btnStopScan"),
-      btnScanCurrentPhotoBarcode: document.getElementById("btnScanCurrentPhotoBarcode"),
-      btnToggleBarcodeCam: document.getElementById("btnToggleBarcodeCam"),
-      btnFromLoadedPhoto: document.getElementById("btnFromLoadedPhoto"),
-      btnNativeBarcodeCam: document.getElementById("btnNativeBarcodeCam"),
-      btnCloseBarcodeCam: document.getElementById("btnCloseBarcodeCam"),
-      barcodeScanField: document.getElementById("barcodeScanField"),
-      barcodeEngineBadge: document.getElementById("barcodeEngineBadge"),
-      barcodeVideo: document.getElementById("barcodeVideo"),
-      barcodeScanMsg: document.getElementById("barcodeScanMsg")
-    };
-
-    function current() {
-      return state.items[state.activeIndex] || null;
+    function setPassword(val, row = cur()) {
+      const clean = String(val || "").replace(/\D/g, "");
+      const door = clean.length >= 2 ? clean.slice(-2) : "";
+      if (row) { row.pw = clean; row.door = door; }
+      if (!row || row === cur()) {
+        $("pw").value = clean;
+        $("door").value = door;
+      }
+      renderTable();
     }
 
-    function evaluateRunnerCapture(item) {
-      if (!item || !item.img) {
-        return { level: "neutral", summary: "No photo loaded.", issues: [] };
-      }
-      const w = item.img.naturalWidth || item.img.width || 0;
-      const h = item.img.naturalHeight || item.img.height || 0;
-      const issues = [];
+    function parseOcr(text) {
+      const clean = String(text || "").replace(/[|]/g, "I");
+      const digits = clean.replace(/[Oo]/g, "0").replace(/[Il]/g, "1").replace(/\D/g, "");
+      const po = (digits.match(/3401\d{6}/) || [])[0] || "";
 
-      if (w < 700 || h < 700) {
-        issues.push(`Low resolution (${w}×${h}px)`);
-      }
-      if (!item.password || item.password.length !== CONFIG.passwordLength) {
-        issues.push("Password not 9 digits");
-      }
-      if (!item.door || item.door.length !== 2) {
-        issues.push("Door # missing");
-      }
-      if (!item.po || !new RegExp(`^${CONFIG.poPrefix}\\d{${CONFIG.poLength - CONFIG.poPrefix.length}}$`).test(item.po)) {
-        issues.push("PO invalid/missing");
-      }
-      if (!item.requester) {
-        issues.push("Requester missing");
-      }
-      if (!item.itemCodes || !item.itemCodes.length) {
-        issues.push("Item code missing");
-      }
-      if (item.barcodePw && item.ocrPw && item.barcodePw !== item.ocrPw) {
-        issues.push(`Barcode (${item.barcodePw}) ≠ OCR (${item.ocrPw})`);
-      }
-
-      if (item.status === "Queued" || item.status === "Scanning...") {
-        return {
-          level: "neutral",
-          summary: `Resolution: ${w}×${h}px — waiting for scan.`,
-          issues: []
-        };
-      }
-
-      if (!issues.length) {
-        return {
-          level: "ok",
-          summary: `Capture looks good (${w}×${h}px): PW, Door #, PO, Requester & Item Code all captured.`,
-          issues: []
-        };
-      }
-
-      return {
-        level: "warn",
-        summary: `Possible wrong/incomplete capture (${w}×${h}px): ${issues.join(" • ")}.`,
-        issues
-      };
-    }
-
-    function renderCaptureCheck() {
-      const item = current();
-      const chk = evaluateRunnerCapture(item);
-      el.captureCheckBox.className = "check-banner" + (
-        chk.level === "ok" ? " check-ok" : chk.level === "warn" ? " check-warn" : ""
-      );
-      el.captureCheckBox.textContent = chk.summary;
-    }
-
-    function applyPassword(rawPassword, item = current()) {
-      const cleaned = String(rawPassword || "").replace(/\D/g, "");
-      const door = cleaned.length >= 2 ? cleaned.slice(-2) : "";
-      if (item) {
-        item.password = cleaned;
-        item.door = door;
-      }
-      if (item === current() || !item) {
-        el.pwInput.value = cleaned;
-        el.doorInput.value = door;
-      }
-      renderCaptureCheck();
-    }
-
-    function normalizeDigits(text) {
-      return String(text || "")
-        .replace(/[Oo]/g, "0")
-        .replace(/[Il|]/g, "1")
-        .replace(/[Ss]/g, "5")
-        .replace(/[Bb]/g, "8")
-        .replace(/\D/g, "");
-    }
-
-    function extractPoNumber(text) {
-      const normalized = normalizeDigits(text);
-      const regex = new RegExp(`${CONFIG.poPrefix}\\d{${CONFIG.poLength - CONFIG.poPrefix.length}}`, "g");
-      const matches = normalized.match(regex) || [];
-      return matches[0] || "";
-    }
-
-    function extractBarcodePassword(rawValue) {
-      const digits = String(rawValue || "").replace(/\D/g, "");
-      if (digits.length === CONFIG.passwordLength) return digits;
-      const m = digits.match(/\d{9}/);
-      return m ? m[0] : (digits || "");
-    }
-
-    function extractOcrPasswordFallback(text) {
-      const lines = String(text || "").split(/\r?\n/);
-      for (const line of lines) {
-        if (/goods\s*receipt|p\/?o\s*no|account\s*assignment|vendor\s*delivery/i.test(line)) continue;
-        const d = normalizeDigits(line);
-        const matches = d.match(/\d{9}/g) || [];
-        for (const candidate of matches) {
-          if (!candidate.startsWith("3401") && !candidate.startsWith("5004")) {
-            return candidate;
-          }
-        }
-      }
-      return "";
-    }
-
-    function extractRequester(text) {
-      const cleaned = String(text || "").replace(/[|]/g, "I");
-      const lines = cleaned.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-
-      function normalizeDotUsername(raw) {
-        let u = String(raw || "").trim().toLowerCase();
-        u = u.replace(/^cn([a-z]{2,})/i, "ch$1");
-        u = u.replace(/\.cn([a-z]*)$/i, ".ch$1");
-        return u;
-      }
-
-      function normalizeRequestorId(raw) {
-        let s = String(raw || "")
-          .replace(/[Oo]/g, "0")
-          .replace(/[Il]/g, "1")
-          .replace(/[Ss]/g, "5")
-          .replace(/[Zz]/g, "2")
-          .replace(/[Bb]/g, "8");
-
-        const exact08 = s.match(/\b(08\d{6})\b/);
-        if (exact08) return exact08[1];
-
-        const missingZero = s.match(/\b(8\d{6})\b/);
-        if (missingZero) return "0" + missingZero[1];
-
-        return "";
-      }
-
+      const lines = clean.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+      let pr = "";
       for (let i = 0; i < lines.length; i++) {
-        if (/requestor/i.test(lines[i])) {
-          const windowText = [lines[i], lines[i + 1] || "", lines[i + 2] || ""].join(" ");
-          const userMatch = windowText.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/);
-          if (userMatch && !/^(curr|price|net|amt|unit|dept|cea)$/i.test(userMatch[1])) {
-            return normalizeDotUsername(userMatch[1]);
-          }
-          const id = normalizeRequestorId(windowText);
-          if (id) return id;
+        if (/pr\s*#?|requestor|requester/i.test(lines[i])) {
+          const block = [lines[i], lines[i + 1] || ""].join(" ");
+          const m = block.match(/([A-Za-z]{2,}\.[A-Za-z]{1,}|08\d{6}|PR[-:]?\w+)/i);
+          if (m) { pr = m[1].toLowerCase(); break; }
         }
       }
-
-      for (const line of lines) {
-        if (/entered\s*by|curr\.?|unit\s*price|po\s*net\s*amt/i.test(line)) continue;
-        const matches = line.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/g) || [];
-        for (const m of matches) {
-          const normalized = normalizeDotUsername(m);
-          if (
-            !normalized.startsWith("curr") &&
-            !normalized.startsWith("price") &&
-            !normalized.endsWith(".mop") &&
-            normalized !== "no.of"
-          ) {
-            return normalized;
-          }
-        }
+      if (!pr) {
+        const m = clean.match(/\b([a-z]{2,}\.[a-z]{1,}|08\d{6})\b/i);
+        if (m) pr = m[1].toLowerCase();
       }
 
-      for (const line of lines) {
-        if (/entered\s*by/i.test(line)) continue;
-        const id = normalizeRequestorId(line);
-        if (id) return id;
-      }
-
-      return "";
-    }
-
-    function extractItemCodes(text) {
-      const raw = String(text || "");
-      const candidates = raw.match(/\b[A-Z]{2,4}\d{6,10}\b/g) || [];
-      const excludedPrefixes = ["PRG", "CEA", "MOP", "USD", "HKD", "CNY"];
+      const codes = [];
       const seen = new Set();
-      const result = [];
-
-      for (const code of candidates) {
-        if (code.startsWith(CONFIG.poPrefix)) continue;
-        if (excludedPrefixes.some(p => code.startsWith(p))) continue;
-        if (!seen.has(code)) {
-          seen.add(code);
-          result.push(code);
+      for (const m of clean.match(/\b[A-Z]{2,4}\d{6,10}\b/g) || []) {
+        if (!m.startsWith("3401") && !["PRG", "MOP", "USD", "HKD"].some(p => m.startsWith(p)) && !seen.has(m)) {
+          seen.add(m);
+          codes.push(m);
         }
       }
-      return result;
+
+      return { po, pr, codes };
     }
 
-    function buildCanvas(img, rotation = 0, options = {}) {
-      const {
-        scale = 1,
-        maxDimension = 2600,
-        grayscale = false,
-        contrast = 1,
-        threshold = 0,
-        invert = false
-      } = options;
-
-      const rad = (rotation * Math.PI) / 180;
-      const sin = Math.abs(Math.sin(rad));
-      const cos = Math.abs(Math.cos(rad));
-      const sw = img.naturalWidth || img.videoWidth || img.width;
-      const sh = img.naturalHeight || img.videoHeight || img.height;
-
-      const rw = sw * cos + sh * sin;
-      const rh = sw * sin + sh * cos;
-      const fit = Math.min(1, maxDimension / Math.max(rw, rh));
-      const finalScale = fit * scale;
-
-      const canvas = document.createElement("canvas");
-      canvas.width = Math.max(1, Math.round(rw * finalScale));
-      canvas.height = Math.max(1, Math.round(rh * finalScale));
-
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      ctx.save();
-      ctx.translate(canvas.width / 2, canvas.height / 2);
-      ctx.rotate(rad);
-      ctx.drawImage(img, -(sw * finalScale) / 2, -(sh * finalScale) / 2, sw * finalScale, sh * finalScale);
-      ctx.restore();
-
-      if (grayscale || threshold > 0 || invert) {
-        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const d = imgData.data;
-        for (let i = 0; i < d.length; i += 4) {
-          let g = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-          if (contrast !== 1) g = (g - 128) * contrast + 128;
-          g = Math.max(0, Math.min(255, g));
-          if (threshold > 0) g = g >= threshold ? 255 : 0;
-          if (invert) g = 255 - g;
-          d[i] = d[i + 1] = d[i + 2] = g;
-        }
-        ctx.putImageData(imgData, 0, 0);
-      }
-
-      return { canvas };
-    }
-
-    function cropCanvas(source, rx, ry, rw, rh) {
-      const sx = Math.max(0, Math.round(source.width * rx));
-      const sy = Math.max(0, Math.round(source.height * ry));
-      const sw = Math.max(1, Math.min(source.width - sx, Math.round(source.width * rw)));
-      const sh = Math.max(1, Math.min(source.height - sy, Math.round(source.height * rh)));
+    function makeCanvas(img, rot = 0, maxDim = 2200, gray = false) {
+      const rad = (rot * Math.PI) / 180;
+      const sin = Math.abs(Math.sin(rad)), cos = Math.abs(Math.cos(rad));
+      const sw = img.naturalWidth, sh = img.naturalHeight;
+      const rw = sw * cos + sh * sin, rh = sw * sin + sh * cos;
+      const scale = Math.min(1, maxDim / Math.max(rw, rh));
 
       const c = document.createElement("canvas");
-      c.width = sw;
-      c.height = sh;
-      const ctx = c.getContext("2d");
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, sw, sh);
-      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
+      c.width = Math.max(1, Math.round(rw * scale));
+      c.height = Math.max(1, Math.round(rh * scale));
+      const ctx = c.getContext("2d", { willReadFrequently: true });
+      ctx.fillStyle = "#fff";
+      ctx.fillRect(0, 0, c.width, c.height);
+      ctx.save();
+      ctx.translate(c.width / 2, c.height / 2);
+      ctx.rotate(rad);
+      ctx.drawImage(img, -(sw * scale) / 2, -(sh * scale) / 2, sw * scale, sh * scale);
+      ctx.restore();
+
+      if (gray) {
+        const d = ctx.getImageData(0, 0, c.width, c.height);
+        const px = d.data;
+        for (let i = 0; i < px.length; i += 4) {
+          const g = Math.min(255, Math.max(0, (px[i] * 0.3 + px[i + 1] * 0.59 + px[i + 2] * 0.11 - 128) * 1.3 + 128));
+          px[i] = px[i + 1] = px[i + 2] = g;
+        }
+        ctx.putImageData(d, 0, 0);
+      }
       return c;
     }
 
-    function playScanBeep() {
-      try {
-        const AudioCtx = window.AudioContext || window.webkitAudioContext;
-        if (!AudioCtx) return;
-        const ctx = new AudioCtx();
-        const osc = ctx.createOscillator();
-        const gain = ctx.createGain();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(1050, ctx.currentTime);
-        gain.gain.setValueAtTime(0.14, ctx.currentTime);
-        osc.connect(gain);
-        gain.connect(ctx.destination);
-        osc.start();
-        osc.stop(ctx.currentTime + 0.11);
-      } catch (_) {}
-    }
-
-    function isHuaweiOrXiaomiDevice() {
-      const ua = (navigator.userAgent || "").toLowerCase();
-      return /huawei|honor|harmonyos|emui|xiaomi|redmi|\bmi\b|miui|hyperos/.test(ua);
-    }
-
-    function setBarcodeBadge(mode, isHwXm = false) {
-      if (!el.barcodeEngineBadge) return;
-      if (isHwXm) {
-        el.barcodeEngineBadge.textContent = "📱 Huawei/Xiaomi Mode (ZXing)";
-        el.barcodeEngineBadge.style.background = "#fef3c7";
-        el.barcodeEngineBadge.style.color = "#92400e";
-      } else if (mode === "native") {
-        el.barcodeEngineBadge.textContent = "⚡ Fast Scanner (BarcodeDetector)";
-        el.barcodeEngineBadge.style.background = "#dcfce7";
-        el.barcodeEngineBadge.style.color = "#166534";
-      } else {
-        el.barcodeEngineBadge.textContent = "🔄 Compatible Scanner (ZXing)";
-        el.barcodeEngineBadge.style.background = "#e0f2fe";
-        el.barcodeEngineBadge.style.color = "#0369a1";
-      }
-    }
-
-    async function getSupportedNativeFormats() {
-      if (typeof window.BarcodeDetector === "undefined") return [];
-      if (typeof window.BarcodeDetector.getSupportedFormats !== "function") {
-        return REQUIRED_BARCODE_FORMATS;
-      }
-      try {
-        const supported = await window.BarcodeDetector.getSupportedFormats();
-        if (!Array.isArray(supported) || !supported.length) return [];
-        const supportedSet = new Set(supported.map(f => String(f).toLowerCase()));
-        return REQUIRED_BARCODE_FORMATS.filter(f => supportedSet.has(f.toLowerCase()));
-      } catch (_) {
-        return [];
-      }
-    }
-
-    async function acquireBarcodeStream() {
-      const candidates = [
-        { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
-        { video: { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
-        { video: { facingMode: "environment" }, audio: false },
-        { video: true, audio: false }
-      ];
-      let lastErr = null;
-      for (const c of candidates) {
-        try {
-          const stream = await navigator.mediaDevices.getUserMedia(c);
-          if (stream) return stream;
-        } catch (err) {
-          lastErr = err;
-        }
-      }
-      throw lastErr || new Error("Unable to open camera stream");
-    }
-
-    function onBarcodeScanned(rawValue) {
-      if (state.barcodeHandled) return;
-      const pw = extractBarcodePassword(rawValue);
-      if (!pw) return;
-
-      state.barcodeHandled = true;
-      playScanBeep();
-      if (navigator.vibrate) navigator.vibrate(90);
-
-      const item = current();
-      if (item) item.barcodePw = pw;
-      applyPassword(pw, item);
-      if (item) {
-        el.statusMsg.textContent = `${item.name} → PW: ${item.password} | Door: ${item.door || "—"}`;
-      }
-      renderTableOnly();
-      closeBarcodeScanner();
-    }
-
-    function startZxingBarcodeLoop(videoEl, isHwXm = false) {
-      if (state.barcodeHandled || !state.barcodeCamActive) return;
-      setBarcodeBadge("zxing", isHwXm);
-
-      if (state.barcodeLoopTimer) {
-        clearTimeout(state.barcodeLoopTimer);
-        state.barcodeLoopTimer = null;
-      }
-
-      if (!window.ZXingBrowser || !window.ZXingBrowser.BrowserMultiFormatReader) {
-        el.barcodeScanMsg.textContent = "ZXing library unavailable; use 📸 photo scan.";
-        return;
-      }
-
-      if (!state.zxingReader) {
-        state.zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
-      }
-
-      const frameCanvas = document.createElement("canvas");
-      const frameCtx = frameCanvas.getContext("2d", { willReadFrequently: true });
-      let counter = 0;
-
-      const tick = async () => {
-        if (state.barcodeHandled || !state.barcodeCamActive || !state.barcodeStream) return;
-
-        if (
-          !state.barcodeDecodingFrame &&
-          videoEl.readyState >= videoEl.HAVE_CURRENT_DATA &&
-          videoEl.videoWidth > 0 &&
-          videoEl.videoHeight > 0
-        ) {
-          state.barcodeDecodingFrame = true;
-          try {
-            const fullFrame = (counter++ % 2 === 1);
-            const sw = fullFrame ? videoEl.videoWidth : Math.floor(videoEl.videoWidth * 0.9);
-            const sh = fullFrame ? videoEl.videoHeight : Math.floor(videoEl.videoHeight * 0.6);
-            const sx = Math.floor((videoEl.videoWidth - sw) / 2);
-            const sy = Math.floor((videoEl.videoHeight - sh) / 2);
-
-            frameCanvas.width = sw;
-            frameCanvas.height = sh;
-            frameCtx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, sw, sh);
-
-            const res = await state.zxingReader.decodeFromImageUrl(frameCanvas.toDataURL("image/jpeg", 0.85));
-            const txt = res && (res.getText ? res.getText() : res.text);
-            if (txt) {
-              state.barcodeDecodingFrame = false;
-              onBarcodeScanned(txt);
-              return;
-            }
-          } catch (_) {}
-          finally {
-            state.barcodeDecodingFrame = false;
-          }
-        }
-
-        state.barcodeLoopTimer = setTimeout(tick, 110);
-      };
-
-      tick();
-    }
-
-    async function openBarcodeScanner() {
-      if (state.barcodeCamActive) {
-        closeBarcodeScanner();
-        return;
-      }
-
-      if (!window.isSecureContext || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
-        el.nativeBarcodePhotoInput.value = "";
-        el.nativeBarcodePhotoInput.click();
-        return;
-      }
-
-      el.barcodeScanField.classList.remove("hidden");
-      el.barcodeScanMsg.textContent = "Starting camera...";
-      state.barcodeCamActive = true;
-      state.barcodeHandled = false;
-      state.barcodeDecodingFrame = false;
-
-      const isHwXm = isHuaweiOrXiaomiDevice();
-
-      try {
-        const stream = await acquireBarcodeStream();
-        state.barcodeStream = stream;
-        el.barcodeVideo.srcObject = stream;
-        await el.barcodeVideo.play();
-        el.barcodeScanMsg.textContent = "Align barcode inside the blue frame to fill Password & Door #";
-      } catch (_) {
-        closeBarcodeScanner();
-        el.nativeBarcodePhotoInput.value = "";
-        el.nativeBarcodePhotoInput.click();
-        return;
-      }
-
-      if (isHwXm) {
-        startZxingBarcodeLoop(el.barcodeVideo, true);
-        return;
-      }
-
-      const formats = await getSupportedNativeFormats();
-      if (formats.length > 0) {
-        try {
-          const detector = new window.BarcodeDetector({ formats });
-          setBarcodeBadge("native", false);
-          const cropCanvas = document.createElement("canvas");
-          const cropCtx = cropCanvas.getContext("2d", { willReadFrequently: true });
-          let errors = 0;
-
-          const loop = async () => {
-            if (state.barcodeHandled || !state.barcodeCamActive || !state.barcodeStream) return;
-
-            if (
-              el.barcodeVideo.readyState >= el.barcodeVideo.HAVE_CURRENT_DATA &&
-              el.barcodeVideo.videoWidth > 0 &&
-              el.barcodeVideo.videoHeight > 0
-            ) {
-              const sw = Math.floor(el.barcodeVideo.videoWidth * 0.88);
-              const sh = Math.floor(el.barcodeVideo.videoHeight * 0.52);
-              const sx = Math.floor((el.barcodeVideo.videoWidth - sw) / 2);
-              const sy = Math.floor((el.barcodeVideo.videoHeight - sh) / 2);
-
-              cropCanvas.width = sw;
-              cropCanvas.height = sh;
-              cropCtx.drawImage(el.barcodeVideo, sx, sy, sw, sh, 0, 0, sw, sh);
-
-              try {
-                const codes = await detector.detect(cropCanvas);
-                errors = 0;
-                if (codes && codes.length > 0 && codes[0].rawValue) {
-                  onBarcodeScanned(codes[0].rawValue);
-                  return;
-                }
-              } catch (_) {
-                errors += 1;
-                if (errors >= MAX_NATIVE_DETECT_ERRORS) {
-                  startZxingBarcodeLoop(el.barcodeVideo, false);
-                  return;
-                }
-              }
-            }
-
-            state.barcodeLoopTimer = setTimeout(loop, 80);
-          };
-
-          loop();
-          return;
-        } catch (_) {}
-      }
-
-      startZxingBarcodeLoop(el.barcodeVideo, false);
-    }
-
-    function closeBarcodeScanner() {
-      state.barcodeCamActive = false;
-      state.barcodeDecodingFrame = false;
-
-      if (state.barcodeLoopTimer) {
-        clearTimeout(state.barcodeLoopTimer);
-        state.barcodeLoopTimer = null;
-      }
-
-      if (state.zxingReader) {
-        try { state.zxingReader.reset(); } catch (_) {}
-        state.zxingReader = null;
-      }
-
-      if (state.barcodeStream) {
-        try { state.barcodeStream.getTracks().forEach(t => t.stop()); } catch (_) {}
-        state.barcodeStream = null;
-      }
-
-      if (el.barcodeVideo) {
-        try { el.barcodeVideo.pause(); } catch (_) {}
-        if (el.barcodeVideo.srcObject) {
-          try { el.barcodeVideo.srcObject.getTracks().forEach(t => t.stop()); } catch (_) {}
-          el.barcodeVideo.srcObject = null;
-        }
-      }
-
-      el.barcodeScanField.classList.add("hidden");
-    }
-
-    async function decodeFromPhotoElement(imgEl) {
-      if (typeof window.BarcodeDetector !== "undefined") {
-        try {
-          const formats = await getSupportedNativeFormats();
-          if (formats.length > 0) {
-            const detector = new window.BarcodeDetector({ formats });
-            const found = await detector.detect(imgEl);
-            if (found && found.length > 0 && found[0].rawValue) return found[0].rawValue;
-          }
-        } catch (_) {}
-      }
-
-      if (window.ZXingBrowser && window.ZXingBrowser.BrowserMultiFormatReader) {
-        const reader = new window.ZXingBrowser.BrowserMultiFormatReader();
-        for (const maxDim of [1280, 800, 1600]) {
-          try {
-            const { canvas } = buildCanvas(imgEl, 0, { maxDimension: maxDim });
-            const res = await reader.decodeFromImageUrl(canvas.toDataURL("image/jpeg", 0.92));
-            const txt = res && (res.getText ? res.getText() : res.text);
-            if (txt) return txt;
-          } catch (_) {}
-        }
-      }
-
-      return "";
-    }
-
-    async function scanBarcodeFromCurrentPhoto() {
-      const item = current();
-      if (!item || !item.img) {
-        alert("No GRN photo loaded to scan barcode from.");
-        return;
-      }
-      el.statusMsg.textContent = `Scanning barcode in loaded photo ${item.name} (${item.rotation}°)...`;
-
-      const baseRot = item.rotation || 0;
-      const angles = [baseRot, 0, 90, 270, 180].filter((v, idx, arr) => arr.indexOf(v) === idx);
-      let foundPw = "";
-
-      for (const ang of angles) {
-        foundPw = await scanBarcodeMultiRegion(item.img, ang);
-        if (foundPw) break;
-      }
-
-      if (!foundPw) {
-        const rawCode = await decodeFromPhotoElement(item.img);
-        foundPw = extractBarcodePassword(rawCode);
-      }
-
-      if (foundPw) {
-        item.barcodePw = foundPw;
-        applyPassword(foundPw, item);
-        playScanBeep();
-        renderTableOnly();
-        el.statusMsg.textContent = `${item.name} → Barcode PW: ${item.password} | Door: ${item.door || "—"}`;
-      } else {
-        el.statusMsg.textContent = `No barcode detected in ${item.name}. Try rotating or using 📷 Scan / 📸.`;
-        renderCaptureCheck();
-      }
-    }
-
-    el.nativeBarcodePhotoInput.onchange = e => {
-      const file = e.target.files && e.target.files[0];
-      e.target.value = "";
-      if (!file) return;
-      const reader = new FileReader();
-      reader.onload = ev => {
-        const img = new Image();
-        img.onload = async () => {
-          const code = await decodeFromPhotoElement(img);
-          const pw = extractBarcodePassword(code);
-          if (pw) {
-            const item = current();
-            if (item) item.barcodePw = pw;
-            applyPassword(pw, item);
-            renderTableOnly();
-            el.statusMsg.textContent = `Barcode scanned → PW: ${pw} | Door: ${pw.slice(-2)}`;
-          } else {
-            alert("Could not read a barcode from the photo. Try closer framing or type the 9 digits manually.");
-          }
-        };
-        img.src = ev.target.result;
-      };
-      reader.readAsDataURL(file);
-    };
-
-    async function getWorker() {
-      if (state.worker) return state.worker;
-      state.worker = await Tesseract.createWorker("eng");
+    async function getOcr() {
+      if (!state.worker) state.worker = await Tesseract.createWorker("eng");
       return state.worker;
     }
 
-    async function runOcr(canvas, psm = "6", whitelist = "") {
-      const worker = await getWorker();
-      await worker.setParameters({
-        preserve_interword_spaces: "1",
-        tessedit_pageseg_mode: psm,
-        tessedit_char_whitelist: whitelist
-      });
-      const res = await worker.recognize(canvas);
-      const words = (res.data.words || []).map(w => ({
-        text: w.text || "",
-        bbox: w.bbox || null
-      }));
-      return {
-        text: res.data.text || "",
-        confidence: Number(res.data.confidence || 0),
-        words
-      };
+    async function scanOne(row) {
+      if (!row || !row.img) return;
+      row.status = "Scanning...";
+      renderTable();
+      $("msg").textContent = `Scanning ${row.name}...`;
+
+      const c = makeCanvas(row.img, row.rot, 2400, true);
+      const worker = await getOcr();
+      await worker.setParameters({ preserve_interword_spaces: "1", tessedit_pageseg_mode: "6" });
+      const res = await worker.recognize(c);
+
+      const parsed = parseOcr(res.data.text || "");
+      row.po = parsed.po || row.po;
+      row.pr = parsed.pr || row.pr;
+      row.codes = parsed.codes.length ? parsed.codes : row.codes;
+      row.words = res.data.words || [];
+      row.ocrW = c.width;
+      row.ocrH = c.height;
+      row.status = row.po ? "Scanned" : "Check";
+
+      if (row === cur()) fillInputs(row);
+      renderPreview();
+      renderTable();
+      $("msg").textContent = `${row.name} → PO: ${row.po || "—"} | PR/Req: ${row.pr || "—"} | Items: ${row.codes.join(", ") || "—"}`;
     }
 
-    async function tryDecodeCanvas(canvas) {
-      if ("BarcodeDetector" in window) {
-        try {
-          const formats = await getSupportedNativeFormats();
-          const detector = new BarcodeDetector({ formats: formats.length ? formats : undefined });
-          const codes = await detector.detect(canvas);
-          for (const c of codes) {
-            const pw = extractBarcodePassword(c.rawValue);
-            if (pw) return pw;
-          }
-        } catch (_) {}
+    async function scanAll() {
+      if (state.running || !state.rows.length) return;
+      state.running = true;
+      state.stop = false;
+      $("btnScanAll").disabled = true;
+      $("btnStop").disabled = false;
+
+      for (let i = 0; i < state.rows.length; i++) {
+        if (state.stop) break;
+        state.idx = i;
+        fillInputs(state.rows[i]);
+        await scanOne(state.rows[i]);
       }
 
-      if (window.ZXingBrowser && window.ZXingBrowser.BrowserMultiFormatReader) {
-        try {
-          const reader = new ZXingBrowser.BrowserMultiFormatReader();
-          const result = await reader.decodeFromImageUrl(canvas.toDataURL("image/png"));
-          const txt = result && (result.getText ? result.getText() : result.text);
-          if (txt) {
-            const pw = extractBarcodePassword(txt);
-            if (pw) return pw;
-          }
-        } catch (_) {}
-      }
-
-      return "";
-    }
-
-    async function scanBarcodeMultiRegion(img, rotation) {
-      const { canvas: baseRot } = buildCanvas(img, rotation || 0, {
-        scale: 1,
-        maxDimension: 2200,
-        grayscale: false
-      });
-
-      const { canvas: highContrast } = buildCanvas(img, rotation || 0, {
-        scale: 1.2,
-        maxDimension: 2400,
-        grayscale: true,
-        contrast: 1.5,
-        threshold: 165
-      });
-
-      const candidates = [
-        baseRot,
-        highContrast,
-        cropCanvas(baseRot, 0.0, 0.0, 0.55, 1.0),
-        cropCanvas(baseRot, 0.45, 0.0, 0.55, 1.0),
-        cropCanvas(baseRot, 0.0, 0.45, 1.0, 0.55),
-        cropCanvas(highContrast, 0.0, 0.0, 0.55, 1.0),
-        cropCanvas(highContrast, 0.45, 0.0, 0.55, 1.0),
-        cropCanvas(highContrast, 0.0, 0.45, 1.0, 0.55)
-      ];
-
-      for (const c of candidates) {
-        const pw = await tryDecodeCanvas(c);
-        if (pw) return pw;
-      }
-
-      return "";
-    }
-
-    function computeItemHighlights(words, itemCodes, ocrW, ocrH, previewW, previewH) {
-      if (!words.length || !itemCodes.length || !ocrW || !ocrH) return [];
-      const codeSet = new Set(itemCodes.map(c => c.toUpperCase()));
-      const boxes = [];
-
-      for (const w of words) {
-        const clean = String(w.text || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
-        if (codeSet.has(clean) && w.bbox) {
-          boxes.push({
-            x: (w.bbox.x0 / ocrW) * previewW,
-            y: (w.bbox.y0 / ocrH) * previewH,
-            width: ((w.bbox.x1 - w.bbox.x0) / ocrW) * previewW,
-            height: ((w.bbox.y1 - w.bbox.y0) / ocrH) * previewH
-          });
-        }
-      }
-      return boxes;
-    }
-
-    async function scanItem(item) {
-      if (!item || !item.img) return;
-      item.status = "Scanning...";
-      renderTableOnly();
-      renderCaptureCheck();
-
-      el.statusMsg.textContent = `Scanning ${item.name} (${item.rotation}°)...`;
-
-      const barcodePw = await scanBarcodeMultiRegion(item.img, item.rotation || 0);
-
-      const { canvas: ocrCanvas } = buildCanvas(item.img, item.rotation || 0, {
-        scale: 1.5,
-        maxDimension: 2600,
-        grayscale: true,
-        contrast: 1.35
-      });
-
-      const pageRes = await runOcr(ocrCanvas, "6", "");
-      let combinedText = pageRes.text || "";
-
-      let po = extractPoNumber(combinedText);
-      let req = extractRequester(combinedText);
-      let items = extractItemCodes(combinedText);
-      const ocrPw = extractOcrPasswordFallback(combinedText);
-      let pw = barcodePw || ocrPw;
-
-      if (!po || !req) {
-        const rightBlock = cropCanvas(ocrCanvas, 0.35, 0.15, 0.65, 0.85);
-        const { canvas: zoomRight } = buildCanvas(rightBlock, 0, {
-          scale: 1.5,
-          maxDimension: 2600,
-          grayscale: true,
-          contrast: 1.4
-        });
-        const rightRes = await runOcr(zoomRight, "6", "");
-        combinedText += "\n" + (rightRes.text || "");
-        if (!po) po = extractPoNumber(rightRes.text);
-        if (!req) req = extractRequester(rightRes.text);
-      }
-
-      if (!items.length) {
-        const goodsBlock = cropCanvas(ocrCanvas, 0.0, 0.2, 1.0, 0.75);
-        const goodsRes = await runOcr(goodsBlock, "6", "");
-        combinedText += "\n" + (goodsRes.text || "");
-        items = extractItemCodes(goodsRes.text);
-      }
-
-      if (!req) {
-        const anglesToTry = [0, 90, 270, 180];
-        for (const deg of anglesToTry) {
-          const testRot = ((item.rotation || 0) + deg) % 360;
-          const { canvas: tryCanvas } = buildCanvas(item.img, testRot, {
-            scale: 2,
-            maxDimension: 2800,
-            grayscale: true,
-            contrast: 1.45
-          });
-          const tryRes = await runOcr(tryCanvas, "6", "");
-          combinedText += "\n" + (tryRes.text || "");
-          const foundReq = extractRequester(tryRes.text);
-          if (foundReq) {
-            req = foundReq;
-            if (!po) po = extractPoNumber(tryRes.text);
-            if (!items.length) items = extractItemCodes(tryRes.text);
-            break;
-          }
-        }
-      }
-
-      item.barcodePw = barcodePw || "";
-      item.ocrPw = ocrPw || "";
-      item.rawText = combinedText.trim();
-      item.po = po || item.po || "";
-      item.requester = req || item.requester || "";
-      item.itemCodes = items.length ? items : (item.itemCodes || []);
-      item.ocrWords = pageRes.words;
-      item.ocrWidth = ocrCanvas.width;
-      item.ocrHeight = ocrCanvas.height;
-
-      if (pw) {
-        applyPassword(pw, item);
-      }
-
-      item.status = (item.po && item.requester && item.itemCodes.length) ? "Done" : "Review";
-      el.statusMsg.textContent =
-        `${item.name} → PW: ${item.password || "—"} | Door: ${item.door || "—"} | ` +
-        `PO: ${item.po || "—"} | Req: ${item.requester || "—"} | Items: ${item.itemCodes.join(", ") || "—"}`;
-    }
-
-    async function scanAllQueue(startIndex = 0) {
-      if (state.scanning || !state.items.length) return;
-      state.scanning = true;
-      state.stopRequested = false;
-      el.btnScanAll.disabled = true;
-      el.btnStopScan.disabled = false;
-
-      const total = state.items.length;
-      for (let i = startIndex; i < total; i++) {
-        if (state.stopRequested) break;
-        state.activeIndex = i;
-        await scanItem(state.items[i]);
-        el.progressFill.style.width = `${Math.round(((i + 1) / total) * 100)}%`;
-        render();
-      }
-
-      state.scanning = false;
-      state.stopRequested = false;
-      el.btnScanAll.disabled = false;
-      el.btnStopScan.disabled = true;
-    }
-
-    function addFiles(files) {
-      const remainingSlots = Math.max(0, CONFIG.maxBatchSize - state.items.length);
-      const validFiles = Array.from(files)
-        .filter(f => f.type.startsWith("image/"))
-        .slice(0, remainingSlots);
-
-      if (!validFiles.length) return;
-
-      const startIdx = state.items.length;
-      let loaded = 0;
-
-      validFiles.forEach(file => {
-        const reader = new FileReader();
-        reader.onload = ev => {
-          const img = new Image();
-          img.onload = () => {
-            const autoRot = img.height > img.width * 1.25 ? 270 : 0;
-            state.items.push({
-              name: file.name,
-              img,
-              rotation: autoRot,
-              password: "",
-              door: "",
-              barcodePw: "",
-              ocrPw: "",
-              po: "",
-              requester: "",
-              itemCodes: [],
-              ocrWords: [],
-              ocrWidth: 0,
-              ocrHeight: 0,
-              rawText: "",
-              status: "Queued"
-            });
-            loaded++;
-            if (state.activeIndex === -1) state.activeIndex = 0;
-            render();
-            if (loaded === validFiles.length) {
-              scanAllQueue(startIdx);
-            }
-          };
-          img.src = ev.target.result;
-        };
-        reader.readAsDataURL(file);
-      });
+      state.running = false;
+      state.stop = false;
+      $("btnScanAll").disabled = false;
+      $("btnStop").disabled = true;
     }
 
     function renderPreview() {
-      const item = current();
-      el.photoCounter.textContent = `${state.items.length ? state.activeIndex + 1 : 0} / ${state.items.length}`;
+      const row = cur();
+      $("counter").textContent = `${state.rows.length ? state.idx + 1 : 0} / ${state.rows.length}`;
+      if (!row) { $("stageWrap").innerHTML = "No GRN images loaded"; return; }
 
-      if (!item) {
-        el.previewBox.innerHTML = "No GRN photos inserted";
-        el.rawOcrPreview.textContent = "";
-        return;
-      }
-
-      const { canvas } = buildCanvas(item.img, item.rotation || 0, {
-        scale: 1,
-        maxDimension: 1400,
-        grayscale: false
-      });
-
+      const c = makeCanvas(row.img, row.rot, 1200, false);
       const stage = document.createElement("div");
-      stage.className = "preview-stage";
-      stage.appendChild(canvas);
-
-      el.previewBox.innerHTML = "";
-      el.previewBox.appendChild(stage);
-      el.rawOcrPreview.textContent = item.rawText || "";
+      stage.className = "stage";
+      stage.appendChild(c);
+      $("stageWrap").innerHTML = "";
+      $("stageWrap").appendChild(stage);
 
       requestAnimationFrame(() => {
-        const rect = canvas.getBoundingClientRect();
-        if (!rect.width || !rect.height) return;
-        const boxes = computeItemHighlights(
-          item.ocrWords,
-          item.itemCodes,
-          item.ocrWidth,
-          item.ocrHeight,
-          rect.width,
-          rect.height
-        );
-        for (const b of boxes) {
-          const div = document.createElement("div");
-          div.className = "highlight-box";
-          div.style.left = `${b.x}px`;
-          div.style.top = `${b.y}px`;
-          div.style.width = `${Math.max(12, b.width)}px`;
-          div.style.height = `${Math.max(10, b.height)}px`;
-          stage.appendChild(div);
+        const rect = c.getBoundingClientRect();
+        if (!rect.width || !row.words?.length || !row.codes?.length) return;
+        const set = new Set(row.codes.map(x => x.toUpperCase()));
+        for (const w of row.words) {
+          const clean = String(w.text || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          if (set.has(clean) && w.bbox) {
+            const box = document.createElement("div");
+            box.className = "red-box";
+            box.style.left = `${(w.bbox.x0 / row.ocrW) * rect.width}px`;
+            box.style.top = `${(w.bbox.y0 / row.ocrH) * rect.height}px`;
+            box.style.width = `${Math.max(12, ((w.bbox.x1 - w.bbox.x0) / row.ocrW) * rect.width)}px`;
+            box.style.height = `${Math.max(10, ((w.bbox.y1 - w.bbox.y0) / row.ocrH) * rect.height)}px`;
+            stage.appendChild(box);
+          }
         }
       });
     }
 
-    function renderInputsOnly() {
-      const item = current();
-      if (!item) {
-        el.pwInput.value = "";
-        el.doorInput.value = "";
-        el.poInput.value = "";
-        el.reqInput.value = "";
-        el.itemInput.value = "";
-        return;
-      }
-      el.pwInput.value = item.password || "";
-      el.doorInput.value = item.door || "";
-      el.poInput.value = item.po || "";
-      el.reqInput.value = item.requester || "";
-      el.itemInput.value = (item.itemCodes || []).join(", ");
+    function fillInputs(row) {
+      $("pw").value = row?.pw || "";
+      $("door").value = row?.door || "";
+      $("po").value = row?.po || "";
+      $("pr").value = row?.pr || "";
+      $("items").value = (row?.codes || []).join(", ");
     }
 
-    function renderTableOnly() {
-      if (!state.items.length) {
-        el.tableBody.innerHTML = `<tr><td colspan="9" style="text-align:center; color:#94a3b8; padding:18px;">No GRN records yet</td></tr>`;
+    function renderTable() {
+      if (!state.rows.length) {
+        $("tbody").innerHTML = `<tr><td colspan="8" style="text-align:center; color:#94a3b8; padding:16px;">No records</td></tr>`;
         return;
       }
-
-      el.tableBody.innerHTML = state.items.map((item, idx) => {
-        const redItems = (item.itemCodes || []).length
-          ? `<span class="item-red">${item.itemCodes.join(", ")}</span>`
-          : "—";
-        const chk = evaluateRunnerCapture(item);
-        const flagHtml = chk.level === "ok"
-          ? `<span class="flag-pill flag-ok">✓ OK</span>`
-          : chk.level === "warn"
-            ? `<span class="flag-pill flag-warn" title="${chk.issues.join("; ")}">⚠ ${chk.issues[0]}</span>`
-            : `<span style="color:#64748b;">—</span>`;
-
-        return `
-          <tr class="${idx === state.activeIndex ? "active" : ""}" onclick="selectRow(${idx})">
-            <td>${idx + 1}</td>
-            <td>${item.name}</td>
-            <td><b>${item.password || "—"}</b></td>
-            <td><b>${item.door || "—"}</b></td>
-            <td>${item.po || "—"}</td>
-            <td>${item.requester || "—"}</td>
-            <td>${redItems}</td>
-            <td>${flagHtml}</td>
-            <td>${item.status || "Queued"}</td>
-          </tr>
-        `;
-      }).join("");
+      $("tbody").innerHTML = state.rows.map((r, i) => `
+        <tr class="${i === state.idx ? "active" : ""}" onclick="pickRow(${i})">
+          <td>${i + 1}</td>
+          <td>${r.name}</td>
+          <td><b>${r.pw || "—"}</b></td>
+          <td><b>${r.door || "—"}</b></td>
+          <td>${r.po || "—"}</td>
+          <td>${r.pr || "—"}</td>
+          <td style="color:#dc2626; font-weight:700;">${(r.codes || []).join(", ") || "—"}</td>
+          <td>${r.status}</td>
+        </tr>
+      `).join("");
     }
 
-    function render() {
+    window.pickRow = i => {
+      state.idx = i;
+      fillInputs(cur());
       renderPreview();
-      renderInputsOnly();
-      renderTableOnly();
-      renderCaptureCheck();
-    }
-
-    window.selectRow = idx => {
-      state.activeIndex = idx;
-      render();
+      renderTable();
     };
 
-    function exportRows() {
-      return state.items.map((item, idx) => {
-        const chk = evaluateRunnerCapture(item);
-        return {
-          "No": idx + 1,
-          "Photo": item.name,
-          "Password": item.password,
-          "Door #": item.door,
-          "PO Number": item.po,
-          "Requester": item.requester,
-          "Item Codes": (item.itemCodes || []).join(", "),
-          "Capture Check": chk.issues.length ? chk.issues.join("; ") : "OK",
-          "Status": item.status
-        };
-      });
-    }
-
-    function exportXlsx() {
-      if (!state.items.length) return;
-      const sheet = XLSX.utils.json_to_sheet(exportRows());
-      const wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, sheet, "GRN_Batch");
-      XLSX.writeFile(wb, `GRN_OCR_${new Date().toISOString().slice(0, 10)}.xlsx`);
-    }
-
-    function exportCsv() {
-      if (!state.items.length) return;
-      const rows = exportRows();
-      const keys = Object.keys(rows[0]);
-      const csv = "\uFEFF" + [
-        keys.join(","),
-        ...rows.map(r => keys.map(k => `"${String(r[k] ?? "").replace(/"/g, '""')}"`).join(","))
+    function summaryText(row) {
+      return [
+        `Door #: ${row?.door || "—"}`,
+        `Open Password: ${row?.pw || "—"}`,
+        `PO Number: ${row?.po || "—"}`,
+        `PR / Requester: ${row?.pr || "—"}`,
+        `Item Codes: ${(row?.codes || []).join(", ") || "—"}`
       ].join("\n");
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
-      a.download = `GRN_OCR_${new Date().toISOString().slice(0, 10)}.csv`;
-      a.click();
     }
 
-    el.btnToggleBarcodeCam.onclick = openBarcodeScanner;
-    el.btnFromLoadedPhoto.onclick = scanBarcodeFromCurrentPhoto;
-    el.btnScanCurrentPhotoBarcode.onclick = scanBarcodeFromCurrentPhoto;
-    el.btnCloseBarcodeCam.onclick = closeBarcodeScanner;
-    el.btnNativeBarcodeCam.onclick = () => {
-      closeBarcodeScanner();
-      el.nativeBarcodePhotoInput.value = "";
-      el.nativeBarcodePhotoInput.click();
-    };
+    function openOutlook() {
+      const row = cur();
+      if (!row) return;
+      const to = encodeURIComponent($("buEmail").value.trim());
+      const subject = encodeURIComponent(`Door ${row.door || "--"} Access | PO ${row.po || ""} | PR ${row.pr || ""}`);
+      const body = encodeURIComponent(summaryText(row));
+      window.location.href = `mailto:${to}?subject=${subject}&body=${body}`;
+    }
 
-    document.getElementById("btnAddPhoto").onclick = () => el.photoInput.click();
-    el.photoInput.onchange = e => {
-      addFiles(e.target.files);
+    $("btnLoad").onclick = () => $("fileInput").click();
+    $("fileInput").onchange = e => {
+      const files = Array.from(e.target.files || []).filter(f => f.type.startsWith("image/")).slice(0, 100 - state.rows.length);
       e.target.value = "";
+      files.forEach(file => {
+        const fr = new FileReader();
+        fr.onload = ev => {
+          const img = new Image();
+          img.onload = () => {
+            state.rows.push({ name: file.name, img, rot: 0, pw: "", door: "", po: "", pr: "", codes: [], words: [], ocrW: 1, ocrH: 1, status: "Queued" });
+            if (state.idx === -1) state.idx = 0;
+            fillInputs(cur());
+            renderPreview();
+            renderTable();
+          };
+          img.src = ev.target.result;
+        };
+        fr.readAsDataURL(file);
+      });
     };
 
-    document.getElementById("btnScanAll").onclick = () => scanAllQueue(0);
-    document.getElementById("btnStopScan").onclick = () => {
-      state.stopRequested = true;
-      el.statusMsg.textContent = "Stopping batch scan after current item...";
-    };
+    $("btnScanOne").onclick = () => scanOne(cur());
+    $("btnScanAll").onclick = scanAll;
+    $("btnStop").onclick = () => { state.stop = true; };
 
-    document.getElementById("btnRotate").onclick = async () => {
-      const item = current();
-      if (!item) return;
-      item.rotation = ((item.rotation || 0) + 90) % 360;
+    $("btnRotate").onclick = () => {
+      const r = cur();
+      if (!r) return;
+      r.rot = (r.rot + 90) % 360;
       renderPreview();
-      await scanItem(item);
-      renderInputsOnly();
-      renderTableOnly();
-      renderCaptureCheck();
     };
 
-    document.getElementById("btnScanNow").onclick = async () => {
-      const item = current();
-      if (!item) return;
-      await scanItem(item);
-      renderInputsOnly();
-      renderTableOnly();
-      renderCaptureCheck();
+    $("btnPrev").onclick = () => { if (state.idx > 0) window.pickRow(state.idx - 1); };
+    $("btnNext").onclick = () => { if (state.idx < state.rows.length - 1) window.pickRow(state.idx + 1); };
+
+    $("btnSaveNext").onclick = () => {
+      const r = cur();
+      if (!r) return;
+      r.status = "Saved";
+      if (state.idx < state.rows.length - 1) window.pickRow(state.idx + 1);
+      else renderTable();
     };
 
-    document.getElementById("btnPrev").onclick = () => {
-      if (state.activeIndex > 0) {
-        state.activeIndex--;
-        render();
-      }
+    $("btnDelete").onclick = () => {
+      if (!cur()) return;
+      state.rows.splice(state.idx, 1);
+      state.idx = Math.min(state.idx, state.rows.length - 1);
+      fillInputs(cur());
+      renderPreview();
+      renderTable();
     };
 
-    document.getElementById("btnNext").onclick = () => {
-      if (state.activeIndex < state.items.length - 1) {
-        state.activeIndex++;
-        render();
-      }
+    $("btnOutlook").onclick = openOutlook;
+    $("btnCopy").onclick = async () => {
+      if (!cur()) return;
+      await navigator.clipboard.writeText(summaryText(cur()));
+      $("msg").textContent = "Copied Door, Password, PO, PR, and Item Codes to clipboard.";
     };
 
-    document.getElementById("btnSaveNext").onclick = () => {
-      const item = current();
-      if (!item) return;
-      item.status = "Confirmed";
-      if (state.activeIndex < state.items.length - 1) {
-        state.activeIndex++;
-      }
-      render();
+    $("btnExport").onclick = () => {
+      if (!state.rows.length) return;
+      const sheet = XLSX.utils.json_to_sheet(state.rows.map((r, i) => ({
+        No: i + 1, File: r.name, Password: r.pw, Door: r.door,
+        PO: r.po, PR_Requester: r.pr, ItemCodes: (r.codes || []).join(", "), Status: r.status
+      })));
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, sheet, "GRN");
+      XLSX.writeFile(wb, "GRN_Door_Dispatch.xlsx");
     };
 
-    document.getElementById("btnClearFields").onclick = () => {
-      const item = current();
-      if (!item) return;
-      item.password = "";
-      item.door = "";
-      item.barcodePw = "";
-      item.ocrPw = "";
-      item.po = "";
-      item.requester = "";
-      item.itemCodes = [];
-      item.ocrWords = [];
-      render();
-    };
-
-    document.getElementById("btnDelete").onclick = () => {
-      if (!current()) return;
-      state.items.splice(state.activeIndex, 1);
-      state.activeIndex = Math.min(state.activeIndex, state.items.length - 1);
-      render();
-    };
-
-    el.pwInput.oninput = e => {
-      applyPassword(e.target.value);
-      renderTableOnly();
-    };
-
-    el.doorInput.oninput = e => {
-      if (current()) {
-        current().door = e.target.value.replace(/\D/g, "").slice(0, 2);
-        renderTableOnly();
-        renderCaptureCheck();
-      }
-    };
-
-    el.poInput.oninput = e => {
-      if (current()) {
-        current().po = e.target.value.trim();
-        renderTableOnly();
-        renderCaptureCheck();
-      }
-    };
-
-    el.reqInput.oninput = e => {
-      if (current()) {
-        current().requester = e.target.value.trim();
-        renderTableOnly();
-        renderCaptureCheck();
-      }
-    };
-
-    el.itemInput.oninput = e => {
-      if (current()) {
-        current().itemCodes = e.target.value
-          .split(/[,\s]+/)
-          .map(s => s.trim().toUpperCase())
-          .filter(Boolean);
+    $("pw").oninput = e => setPassword(e.target.value);
+    $("door").oninput = e => { if (cur()) { cur().door = e.target.value.replace(/\D/g, "").slice(0, 2); renderTable(); } };
+    $("po").oninput = e => { if (cur()) { cur().po = e.target.value.trim(); renderTable(); } };
+    $("pr").oninput = e => { if (cur()) { cur().pr = e.target.value.trim(); renderTable(); } };
+    $("items").oninput = e => {
+      if (cur()) {
+        cur().codes = e.target.value.split(/[,\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
         renderPreview();
-        renderTableOnly();
-        renderCaptureCheck();
+        renderTable();
       }
     };
-
-    document.getElementById("btnExportXlsx").onclick = exportXlsx;
-    document.getElementById("btnExportCsv").onclick = exportCsv;
   </script>
 </body>
 </html>

@@ -470,7 +470,7 @@
       if (!item.door || item.door.length !== 2) {
         issues.push("Door # missing");
       }
-      if (!item.po || !new RegExp(`^${CONFIG.poPrefix}\d{${CONFIG.poLength - CONFIG.poPrefix.length}}$`).test(item.po)) {
+      if (!item.po || !new RegExp(`^${CONFIG.poPrefix}\\d{${CONFIG.poLength - CONFIG.poPrefix.length}}$`).test(item.po)) {
         issues.push("PO invalid/missing");
       }
       if (!item.requester) {
@@ -540,7 +540,7 @@
 
     function extractPoNumber(text) {
       const normalized = normalizeDigits(text);
-      const regex = new RegExp(`${CONFIG.poPrefix}\d{${CONFIG.poLength - CONFIG.poPrefix.length}}`, "g");
+      const regex = new RegExp(`${CONFIG.poPrefix}\\d{${CONFIG.poLength - CONFIG.poPrefix.length}}`, "g");
       const matches = normalized.match(regex) || [];
       return matches[0] || "";
     }
@@ -553,8 +553,7 @@
     }
 
     function extractOcrPasswordFallback(text) {
-      const lines = String(text || "").split(/?
-/);
+      const lines = String(text || "").split(/\r?\n/);
       for (const line of lines) {
         if (/goods\s*receipt|p\/?o\s*no|account\s*assignment|vendor\s*delivery/i.test(line)) continue;
         const d = normalizeDigits(line);
@@ -570,8 +569,7 @@
 
     function extractRequester(text) {
       const cleaned = String(text || "").replace(/[|]/g, "I");
-      const lines = cleaned.split(/?
-/).map(l => l.trim()).filter(Boolean);
+      const lines = cleaned.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
       function normalizeDotUsername(raw) {
         let u = String(raw || "").trim().toLowerCase();
@@ -588,10 +586,10 @@
           .replace(/[Zz]/g, "2")
           .replace(/[Bb]/g, "8");
 
-        const exact08 = s.match(/(08\d{6})/);
+        const exact08 = s.match(/\b(08\d{6})\b/);
         if (exact08) return exact08[1];
 
-        const missingZero = s.match(/(8\d{6})/);
+        const missingZero = s.match(/\b(8\d{6})\b/);
         if (missingZero) return "0" + missingZero[1];
 
         return "";
@@ -600,7 +598,7 @@
       for (let i = 0; i < lines.length; i++) {
         if (/requestor/i.test(lines[i])) {
           const windowText = [lines[i], lines[i + 1] || "", lines[i + 2] || ""].join(" ");
-          const userMatch = windowText.match(/([A-Za-z]{2,25}\.[A-Za-z]{1,25})/);
+          const userMatch = windowText.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/);
           if (userMatch && !/^(curr|price|net|amt|unit|dept|cea)$/i.test(userMatch[1])) {
             return normalizeDotUsername(userMatch[1]);
           }
@@ -611,7 +609,7 @@
 
       for (const line of lines) {
         if (/entered\s*by|curr\.?|unit\s*price|po\s*net\s*amt/i.test(line)) continue;
-        const matches = line.match(/([A-Za-z]{2,25}\.[A-Za-z]{1,25})/g) || [];
+        const matches = line.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/g) || [];
         for (const m of matches) {
           const normalized = normalizeDotUsername(m);
           if (
@@ -636,7 +634,7 @@
 
     function extractItemCodes(text) {
       const raw = String(text || "");
-      const candidates = raw.match(/[A-Z]{2,4}\d{6,10}/g) || [];
+      const candidates = raw.match(/\b[A-Z]{2,4}\d{6,10}\b/g) || [];
       const excludedPrefixes = ["PRG", "CEA", "MOP", "USD", "HKD", "CNY"];
       const seen = new Set();
       const result = [];
@@ -739,7 +737,7 @@
 
     function isHuaweiOrXiaomiDevice() {
       const ua = (navigator.userAgent || "").toLowerCase();
-      return /huawei|honor|harmonyos|emui|xiaomi|redmi|mi|miui|hyperos/.test(ua);
+      return /huawei|honor|harmonyos|emui|xiaomi|redmi|\bmi\b|miui|hyperos/.test(ua);
     }
 
     function setBarcodeBadge(mode, isHwXm = false) {
@@ -1030,7 +1028,6 @@
       }
       el.statusMsg.textContent = `Scanning barcode in loaded photo ${item.name} (${item.rotation}°)...`;
 
-      // Try current rotation first, then 0, 90, 270, 180 if needed
       const baseRot = item.rotation || 0;
       const angles = [baseRot, 0, 90, 270, 180].filter((v, idx, arr) => arr.indexOf(v) === idx);
       let foundPw = "";
@@ -1223,8 +1220,7 @@
           contrast: 1.4
         });
         const rightRes = await runOcr(zoomRight, "6", "");
-        combinedText += "
-" + (rightRes.text || "");
+        combinedText += "\n" + (rightRes.text || "");
         if (!po) po = extractPoNumber(rightRes.text);
         if (!req) req = extractRequester(rightRes.text);
       }
@@ -1232,8 +1228,7 @@
       if (!items.length) {
         const goodsBlock = cropCanvas(ocrCanvas, 0.0, 0.2, 1.0, 0.75);
         const goodsRes = await runOcr(goodsBlock, "6", "");
-        combinedText += "
-" + (goodsRes.text || "");
+        combinedText += "\n" + (goodsRes.text || "");
         items = extractItemCodes(goodsRes.text);
       }
 
@@ -1248,8 +1243,7 @@
             contrast: 1.45
           });
           const tryRes = await runOcr(tryCanvas, "6", "");
-          combinedText += "
-" + (tryRes.text || "");
+          combinedText += "\n" + (tryRes.text || "");
           const foundReq = extractRequester(tryRes.text);
           if (foundReq) {
             req = foundReq;
@@ -1487,11 +1481,10 @@
       if (!state.items.length) return;
       const rows = exportRows();
       const keys = Object.keys(rows[0]);
-      const csv = "﻿" + [
+      const csv = "\uFEFF" + [
         keys.join(","),
         ...rows.map(r => keys.map(k => `"${String(r[k] ?? "").replace(/"/g, '""')}"`).join(","))
-      ].join("
-");
+      ].join("\n");
       const a = document.createElement("a");
       a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
       a.download = `GRN_OCR_${new Date().toISOString().slice(0, 10)}.csv`;

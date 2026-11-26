@@ -343,7 +343,8 @@
       <div class="png-box">
         <div class="label" style="margin-bottom:8px;">給部門掃碼 PNG</div>
         <img id="pngImg" alt="條碼 PNG" />
-        <canvas id="barcodeCanvas" style="display:none;"></canvas>
+        <!-- canvas 放喺畫面外，避免部分瀏覽器 display:none 時量唔到尺寸 -->
+        <canvas id="barcodeCanvas" style="position:absolute;left:-99999px;top:-99999px;"></canvas>
         <div class="btn-row" style="margin-top:14px;">
           <button type="button" class="btn-blue" onclick="shareOrDownloadPng()">分享／下載 PNG</button>
           <button type="button" class="btn-green" onclick="goStep(2)">下一步：影收貨單</button>
@@ -391,6 +392,20 @@
       <div id="recordsList" style="margin-top:20px;"></div>
     </section>
   </div>
+
+  <!-- 真條碼產生器（Code128），CDN 加載；失敗時下面會有 fallback -->
+  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+
+  <!-- 全局錯誤提示：放喺主 script 之前，咁即使主 script 語法錯都見到 -->
+  <script>
+    window.addEventListener("error", function (e) {
+      var el = document.getElementById("statusBanner");
+      if (el) {
+        el.textContent = "程式錯誤：" + (e.message || "未知錯誤");
+        el.classList.add("show");
+      }
+    });
+  </script>
 
   <script>
     const STORAGE_KEY = "runner_cabinet_grn_v1";
@@ -440,50 +455,47 @@
       makePng();
     }
 
-    // 繪製高對比條碼及大字 PNG 方便其他裝置掃描或查看
+    // 用 JsBarcode 產生真．Code128，任何掃碼器都讀得到
     function makePng() {
       const code = (document.getElementById("barcodeInput").value || "174400108").trim();
       const canvas = document.getElementById("barcodeCanvas");
-      const ctx = canvas.getContext("2d");
 
-      canvas.width = 760;
-      canvas.height = 300;
-
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-      ctx.fillStyle = "#000000";
-      ctx.font = "bold 34px sans-serif";
-      ctx.textAlign = "center";
-      ctx.fillText("自助櫃條碼：" + code, canvas.width / 2, 46);
-
-      // 產生 Code39 風格黑白條碼線條
-      const startX = 70;
-      const barTop = 68;
-      const barHeight = 150;
-      const totalWidth = canvas.width - 140;
-      let cursor = startX;
-
-      let seed = 0;
-      for (let i = 0; i < code.length; i++) {
-        seed = (seed * 31 + code.charCodeAt(i)) % 100000;
+      // CDN 未加載時的 fallback：純文字大字，至少唔會空白一片
+      if (typeof JsBarcode === "undefined") {
+        const ctx = canvas.getContext("2d");
+        canvas.width = 760;
+        canvas.height = 300;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = "#b91c1c";
+        ctx.font = "bold 30px sans-serif";
+        ctx.textAlign = "center";
+        ctx.fillText("條碼庫未載入，僅顯示文字", canvas.width / 2, 60);
+        ctx.fillStyle = "#000000";
+        ctx.font = "bold 80px monospace";
+        ctx.fillText(code, canvas.width / 2, 190);
+        const dataUrl = canvas.toDataURL("image/png");
+        document.getElementById("pngImg").src = dataUrl;
+        return dataUrl;
       }
 
-      const patternCount = 58;
-      const unit = totalWidth / (patternCount * 2.2);
-
-      for (let i = 0; i < patternCount; i++) {
-        seed = (seed * 1664525 + 1013904223) % 4294967296;
-        const thick = (seed % 3 === 0) ? 2.4 : 1.2;
-        const w = thick * unit;
-        if (i % 2 === 0 || i === 0 || i === patternCount - 1) {
-          ctx.fillRect(cursor, barTop, Math.max(2, w), barHeight);
-        }
-        cursor += w + unit * 0.9;
+      try {
+        JsBarcode(canvas, code, {
+          format: "CODE128",
+          width: 3,
+          height: 150,
+          displayValue: true,
+          fontSize: 42,
+          font: "monospace",
+          textMargin: 8,
+          margin: 20,
+          background: "#ffffff",
+          lineColor: "#000000"
+        });
+      } catch (err) {
+        // Code128 只支援 ASCII；中文／特殊字元會拋錯
+        showMsg("條碼格式不支援（請用英數）");
       }
-
-      ctx.font = "bold 42px monospace";
-      ctx.fillText(code, canvas.width / 2, 268);
 
       const dataUrl = canvas.toDataURL("image/png");
       document.getElementById("pngImg").src = dataUrl;
@@ -579,9 +591,9 @@
       if (!file) return;
 
       const reader = new FileReader();
-      reader.onload = function(e) {
+      reader.onload = function (e) {
         const img = new Image();
-        img.onload = function() {
+        img.onload = function () {
           const maxW = 1280;
           const scale = img.width > maxW ? maxW / img.width : 1;
           const c = document.createElement("canvas");
@@ -629,7 +641,7 @@
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
       } catch (e) {
-        showMsg("儲存空間滿，請先匯出");
+        showMsg("儲存空間滿！請先去第 3 步匯出／下載相片，再清空舊紀錄");
         return;
       }
 
@@ -697,6 +709,8 @@
       showMsg("開始下載 " + records.length + " 張相片");
     }
 
+    // ⚠️ 原本這裡 join(" 真實換行 ") 造成 SyntaxError，整個 script 不執行。
+    // 現改為 join("\r\n")，BOM 用 "\uFEFF"。
     function exportCsv() {
       if (!records.length) {
         showMsg("未有紀錄可匯出");
@@ -710,10 +724,9 @@
         r.time,
         `${i + 1}_${r.barcode}_${r.grnNo || "grn"}.jpg`
       ]);
-      const csvContent = "﻿" + [header, ...rows]
+      const csvContent = "\uFEFF" + [header, ...rows]
         .map((row) => row.map((cell) => '"' + String(cell).replace(/"/g, '""') + '"').join(","))
-        .join("
-");
+        .join("\r\n");
 
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const url = URL.createObjectURL(blob);

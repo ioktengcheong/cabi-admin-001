@@ -213,7 +213,7 @@
         <div class="row-2">
           <div>
             <label for="pwInput">1. Scanner Password (9 digits)</label>
-            <input id="pwInput" type="text" placeholder="e.g. 172498132" />
+            <input id="pwInput" type="text" placeholder="Scan barcode or type 9 digits" />
           </div>
           <div>
             <label for="doorInput">Door # (Auto Last 2 Digits)</label>
@@ -300,16 +300,11 @@
       return state.items[state.activeIndex] || null;
     }
 
-    // Auto-link Door # from last two digits of Password
     function applyPassword(rawPassword, item = current()) {
       if (!item) return;
       const cleaned = String(rawPassword || "").replace(/\D/g, "");
       item.password = cleaned;
-      if (cleaned.length >= 2) {
-        item.door = cleaned.slice(-2);
-      } else {
-        item.door = "";
-      }
+      item.door = cleaned.length >= 2 ? cleaned.slice(-2) : "";
     }
 
     function normalizeDigits(text) {
@@ -335,27 +330,27 @@
       return m ? m[0] : "";
     }
 
-    function extractOcrPasswordNearLabel(text) {
-      // Only use OCR fallback if near locker/barcode cues and not a GRN receipt number (50045...)
+    function extractOcrPasswordFallback(text) {
+      // Match 9-digit numbers that are NOT PO numbers (3401...) or GRN receipt numbers (50045...)
       const lines = String(text || "").split(/\r?\n/);
       for (const line of lines) {
-        if (/柜|门|开门|失效/.test(line)) {
-          const d = normalizeDigits(line);
-          const m = d.match(/\d{9}/);
-          if (m && !m[0].startsWith("5004")) return m[0];
+        if (/goods\s*receipt|p\/?o\s*no|account\s*assignment|vendor\s*delivery/i.test(line)) continue;
+        const d = normalizeDigits(line);
+        const matches = d.match(/\d{9}/g) || [];
+        for (const candidate of matches) {
+          if (!candidate.startsWith("3401") && !candidate.startsWith("5004")) {
+            return candidate;
+          }
         }
       }
       return "";
     }
 
     function extractRequester(text) {
-      const lines = String(text || "")
-        .replace(/[|]/g, "I")
-        .split(/\r?\n/)
-        .map(l => l.trim())
-        .filter(Boolean);
+      const cleaned = String(text || "").replace(/[|]/g, "I");
+      const lines = cleaned.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-      // Priority 1: Look on or near lines containing "Requestor"
+      // 1. Check near "Requestor" keyword first
       for (let i = 0; i < lines.length; i++) {
         if (/requestor/i.test(lines[i])) {
           const windowText = [lines[i], lines[i + 1] || "", lines[i + 2] || ""].join(" ");
@@ -368,19 +363,24 @@
         }
       }
 
-      // Priority 2: Known email/username dot pattern excluding "Curr." / "Price..."
+      // 2. Match dot usernames (e.g. martin.tai, charlotte.u) excluding currency/header noise
       for (const line of lines) {
         if (/entered\s*by|curr\.?|unit\s*price|po\s*net\s*amt/i.test(line)) continue;
         const matches = line.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/g) || [];
         for (const m of matches) {
           const lower = m.toLowerCase();
-          if (!lower.startsWith("curr") && !lower.includes("price") && lower !== "no.of") {
+          if (
+            !lower.startsWith("curr") &&
+            !lower.startsWith("price") &&
+            !lower.endsWith(".mop") &&
+            lower !== "no.of"
+          ) {
             return lower;
           }
         }
       }
 
-      // Priority 3: 8-digit requestor ID starting with 08 (excluding "Entered by")
+      // 3. Match 8-digit requestor ID starting with 08 (excluding "Entered by")
       for (const line of lines) {
         if (/entered\s*by/i.test(line)) continue;
         const idMatch = line.match(/\b(08\d{6})\b/);
@@ -414,7 +414,8 @@
         maxDimension = 2800,
         grayscale = false,
         contrast = 1,
-        threshold = 0
+        threshold = 0,
+        invert = false
       } = options;
 
       const rad = (rotation * Math.PI) / 180;
@@ -442,7 +443,7 @@
       ctx.drawImage(img, -(sw * finalScale) / 2, -(sh * finalScale) / 2, sw * finalScale, sh * finalScale);
       ctx.restore();
 
-      if (grayscale || threshold > 0) {
+      if (grayscale || threshold > 0 || invert) {
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const d = imgData.data;
         for (let i = 0; i < d.length; i += 4) {
@@ -450,12 +451,13 @@
           if (contrast !== 1) g = (g - 128) * contrast + 128;
           g = Math.max(0, Math.min(255, g));
           if (threshold > 0) g = g >= threshold ? 255 : 0;
+          if (invert) g = 255 - g;
           d[i] = d[i + 1] = d[i + 2] = g;
         }
         ctx.putImageData(imgData, 0, 0);
       }
 
-      return { canvas, scale: finalScale, rotatedW: rw, rotatedH: rh };
+      return { canvas };
     }
 
     function cropCanvas(source, rx, ry, rw, rh) {
@@ -499,39 +501,65 @@
       };
     }
 
-    async function scanBarcodeMultiRegion(rotatedCanvas) {
-      const regions = [
-        rotatedCanvas,
-        cropCanvas(rotatedCanvas, 0.0, 0.0, 0.55, 1.0),
-        cropCanvas(rotatedCanvas, 0.45, 0.0, 0.55, 1.0),
-        cropCanvas(rotatedCanvas, 0.0, 0.45, 1.0, 0.55)
+    async function tryDecodeCanvas(canvas) {
+      if ("BarcodeDetector" in window) {
+        try {
+          const detector = new BarcodeDetector({
+            formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "itf"]
+          });
+          const codes = await detector.detect(canvas);
+          for (const c of codes) {
+            const pw = extractBarcodePassword(c.rawValue);
+            if (pw) return pw;
+          }
+        } catch (_) {}
+      }
+
+      if (window.ZXingBrowser) {
+        try {
+          const reader = new ZXingBrowser.BrowserMultiFormatReader();
+          const result = await reader.decodeFromImageUrl(canvas.toDataURL("image/png"));
+          if (result) {
+            const pw = extractBarcodePassword(result.getText());
+            if (pw) return pw;
+          }
+        } catch (_) {}
+      }
+
+      return "";
+    }
+
+    async function scanBarcodeMultiRegion(img, rotation) {
+      const { canvas: baseRot } = buildCanvas(img, rotation || 0, {
+        scale: 1,
+        maxDimension: 2200,
+        grayscale: false
+      });
+
+      const { canvas: highContrast } = buildCanvas(img, rotation || 0, {
+        scale: 1.2,
+        maxDimension: 2400,
+        grayscale: true,
+        contrast: 1.6,
+        threshold: 165
+      });
+
+      const candidates = [
+        baseRot,
+        highContrast,
+        cropCanvas(baseRot, 0.0, 0.0, 0.55, 1.0),
+        cropCanvas(baseRot, 0.45, 0.0, 0.55, 1.0),
+        cropCanvas(baseRot, 0.0, 0.45, 1.0, 0.55),
+        cropCanvas(highContrast, 0.0, 0.0, 0.55, 1.0),
+        cropCanvas(highContrast, 0.45, 0.0, 0.55, 1.0),
+        cropCanvas(highContrast, 0.0, 0.45, 1.0, 0.55)
       ];
 
-      for (const region of regions) {
-        if ("BarcodeDetector" in window) {
-          try {
-            const detector = new BarcodeDetector({
-              formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "itf"]
-            });
-            const codes = await detector.detect(region);
-            for (const c of codes) {
-              const pw = extractBarcodePassword(c.rawValue);
-              if (pw) return pw;
-            }
-          } catch (_) {}
-        }
-
-        if (window.ZXingBrowser) {
-          try {
-            const reader = new ZXingBrowser.BrowserMultiFormatReader();
-            const result = await reader.decodeFromImageUrl(region.toDataURL("image/png"));
-            if (result) {
-              const pw = extractBarcodePassword(result.getText());
-              if (pw) return pw;
-            }
-          } catch (_) {}
-        }
+      for (const c of candidates) {
+        const pw = await tryDecodeCanvas(c);
+        if (pw) return pw;
       }
+
       return "";
     }
 
@@ -543,11 +571,12 @@
       for (const w of words) {
         const clean = String(w.text || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
         if (codeSet.has(clean) && w.bbox) {
-          const x = (w.bbox.x0 / ocrW) * previewW;
-          const y = (w.bbox.y0 / ocrH) * previewH;
-          const width = ((w.bbox.x1 - w.bbox.x0) / ocrW) * previewW;
-          const height = ((w.bbox.y1 - w.bbox.y0) / ocrH) * previewH;
-          boxes.push({ x, y, width, height });
+          boxes.push({
+            x: (w.bbox.x0 / ocrW) * previewW,
+            y: (w.bbox.y0 / ocrH) * previewH,
+            width: ((w.bbox.x1 - w.bbox.x0) / ocrW) * previewW,
+            height: ((w.bbox.y1 - w.bbox.y0) / ocrH) * previewH
+          });
         }
       }
       return boxes;
@@ -560,19 +589,13 @@
 
       el.statusMsg.textContent = `Scanning ${item.name} (${item.rotation}°)...`;
 
-      const { canvas: rawRot } = buildCanvas(item.img, item.rotation || 0, {
-        scale: 1,
-        maxDimension: 2200,
-        grayscale: false
-      });
-
-      const barcodePw = await scanBarcodeMultiRegion(rawRot);
+      const barcodePw = await scanBarcodeMultiRegion(item.img, item.rotation || 0);
 
       const { canvas: ocrCanvas } = buildCanvas(item.img, item.rotation || 0, {
-        scale: 1.2,
+        scale: 1.25,
         maxDimension: 2600,
         grayscale: true,
-        contrast: 1.3
+        contrast: 1.35
       });
 
       const pageRes = await runOcr(ocrCanvas, "6", "");
@@ -581,20 +604,20 @@
       let po = extractPoNumber(pageRes.text);
       let req = extractRequester(pageRes.text);
       let items = extractItemCodes(pageRes.text);
-      let pw = barcodePw || extractOcrPasswordNearLabel(pageRes.text);
+      let pw = barcodePw || extractOcrPasswordFallback(pageRes.text);
 
-      // Targeted fallback for PO if missed
-      if (!po) {
-        const rightHalf = cropCanvas(ocrCanvas, 0.45, 0.0, 0.55, 0.7);
-        const poRes = await runOcr(rightHalf, "6", "0123456789POno:/ ");
-        po = extractPoNumber(poRes.text);
+      // Targeted pass for Requester + Item Codes if missed on full-page OCR
+      if (!req || !items.length) {
+        const detailArea = cropCanvas(ocrCanvas, 0.0, 0.15, 0.95, 0.8);
+        const detailRes = await runOcr(detailArea, "6", "");
+        if (!req) req = extractRequester(detailRes.text);
+        if (!items.length) items = extractItemCodes(detailRes.text);
       }
 
-      // Targeted fallback for Item Codes if missed
-      if (!items.length) {
-        const goodsArea = cropCanvas(ocrCanvas, 0.0, 0.15, 0.85, 0.65);
-        const goodsRes = await runOcr(goodsArea, "6", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ");
-        items = extractItemCodes(goodsRes.text);
+      if (!po) {
+        const rightHalf = cropCanvas(ocrCanvas, 0.45, 0.0, 0.55, 0.75);
+        const poRes = await runOcr(rightHalf, "6", "0123456789POno:/ ");
+        po = extractPoNumber(poRes.text);
       }
 
       item.po = po || item.po || "";
@@ -652,7 +675,6 @@
         reader.onload = ev => {
           const img = new Image();
           img.onload = () => {
-            // Default to 0° so user/auto-scan can inspect without forced wrong flip; 270° if tall receipt
             const autoRot = img.height > img.width * 1.25 ? 270 : 0;
             state.items.push({
               name: file.name,
@@ -706,7 +728,6 @@
       el.previewBox.appendChild(stage);
       el.rawOcrPreview.textContent = item.rawText || "";
 
-      // Draw red highlight boxes over matched Item Codes once canvas has layout size
       requestAnimationFrame(() => {
         const rect = canvas.getBoundingClientRect();
         if (!rect.width || !rect.height) return;

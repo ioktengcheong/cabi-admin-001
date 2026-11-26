@@ -1,0 +1,2062 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>GRN OCR & Barcode Locker Door Linker v6 (99% Precision)</title>
+
+  <!-- Tesseract.js v5 for Client-Side OCR -->
+  <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
+  <!-- ZXing Browser for 1D Barcode / Code128 / Code39 / EAN Decoding -->
+  <script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
+
+  <style>
+    :root {
+      --bg-body: #f1f5f9;
+      --bg-card: #ffffff;
+      --bg-subtle: #f8fafc;
+      --bg-dark: #0f172a;
+      --border: #e2e8f0;
+      --border-strong: #cbd5e1;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+      --red: #dc2626;
+      --red-light: #fef2f2;
+      --red-border: #fca5a5;
+      --emerald: #10b981;
+      --emerald-dark: #059669;
+      --amber: #f59e0b;
+      --blue: #2563eb;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      background-color: var(--bg-body);
+      color: var(--text-main);
+      line-height: 1.4;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: #f1f5f9; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+    ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+
+    /* Top Header Bar */
+    .topbar {
+      background: var(--bg-dark);
+      color: #ffffff;
+      border-bottom: 1px solid #1e293b;
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      box-shadow: 0 4px 12px rgba(15, 23, 42, 0.22);
+    }
+
+    .topbar-inner {
+      max-width: 1640px;
+      margin: 0 auto;
+      padding: 10px 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .brand-group { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+    .brand-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #ef4444, #b91c1c);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .brand-title-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+    .brand-title { font-size: 16px; font-weight: 700; letter-spacing: -0.01em; }
+
+    .badge-sap {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+
+    .brand-sub { font-size: 11.5px; color: #94a3b8; margin-top: 1px; }
+
+    .header-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+
+    .kpi-pill {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: #1e293b;
+      border: 1px solid #334155;
+      padding: 6px 12px;
+      border-radius: 10px;
+      font-size: 12px;
+    }
+
+    .kpi-pill span.lbl { color: #94a3b8; }
+    .kpi-pill span.val { font-family: var(--font-mono); font-weight: 700; }
+    .val-white { color: #ffffff; }
+    .val-amber { color: #fbbf24; }
+    .val-green { color: #34d399; }
+    .sep { color: #475569; }
+
+    button {
+      font-family: inherit;
+      cursor: pointer;
+      border: none;
+      outline: none;
+      transition: all 0.15s ease;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 8px 14px;
+      border-radius: 10px;
+      font-size: 12.5px;
+      font-weight: 600;
+    }
+
+    .btn-dark { background: #1e293b; color: #e2e8f0; border: 1px solid #334155; }
+    .btn-dark:hover { background: #334155; }
+
+    .btn-primary { background: var(--blue); color: #ffffff; box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35); }
+    .btn-primary:hover { background: #1d4ed8; }
+
+    .btn-emerald { background: var(--emerald); color: #022c22; font-weight: 800; }
+    .btn-emerald:hover { background: #34d399; }
+
+    .btn-red { background: var(--red); color: #ffffff; }
+    .btn-red:hover { background: #b91c1c; }
+
+    .btn-outline { background: #ffffff; color: #334155; border: 1px solid var(--border-strong); }
+    .btn-outline:hover { background: #f8fafc; }
+
+    .btn-sm { padding: 5px 9px; font-size: 11.5px; border-radius: 8px; }
+
+    .main-wrap {
+      max-width: 1640px;
+      margin: 0 auto;
+      padding: 16px 20px 28px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    /* 3-Column Workstation Grid */
+    .workstation-grid {
+      display: grid;
+      grid-template-columns: 310px minmax(420px, 1fr) 395px;
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    @media (max-width: 1180px) {
+      .workstation-grid { grid-template-columns: 1fr; }
+    }
+
+    .panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      height: 710px;
+    }
+
+    @media (max-width: 1180px) {
+      .panel { height: auto; min-height: 460px; }
+    }
+
+    .panel-header {
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--border);
+      background: var(--bg-subtle);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .panel-title { font-size: 13.5px; font-weight: 700; color: var(--text-main); display: flex; align-items: center; gap: 6px; }
+    .panel-sub { font-size: 11px; color: var(--text-muted); margin-top: 1px; }
+
+    .count-badge {
+      padding: 1px 8px;
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      background: #e2e8f0;
+      color: #334155;
+    }
+
+    .progress-box { padding: 8px 14px; background: #fffbeb; border-bottom: 1px solid #fde68a; }
+    .progress-top { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: #92400e; margin-bottom: 4px; }
+    .progress-track { width: 100%; height: 6px; background: #fde68a; border-radius: 999px; overflow: hidden; }
+    .progress-fill { height: 100%; background: #d97706; width: 0%; transition: width 0.2s ease; }
+
+    .queue-scroll { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+    .empty-drop {
+      flex: 1;
+      border: 2px dashed var(--border-strong);
+      border-radius: 12px;
+      background: #f8fafc;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 20px;
+    }
+
+    .queue-card {
+      padding: 9px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      cursor: pointer;
+      transition: all 0.12s ease;
+    }
+    .queue-card:hover { background: #f8fafc; border-color: #94a3b8; }
+    .queue-card.active { background: #eff6ff; border-color: var(--blue); box-shadow: 0 0 0 2px rgba(37, 99, 235, 0.18); }
+
+    .thumb-wrap {
+      position: relative;
+      width: 48px;
+      height: 48px;
+      border-radius: 8px;
+      overflow: hidden;
+      background: #0f172a;
+      border: 1px solid #cbd5e1;
+      flex-shrink: 0;
+    }
+    .thumb-wrap img { width: 100%; height: 100%; object-fit: cover; }
+    .thumb-idx {
+      position: absolute;
+      top: 2px;
+      left: 2px;
+      background: rgba(15, 23, 42, 0.85);
+      color: #fff;
+      font-family: var(--font-mono);
+      font-size: 9px;
+      font-weight: 700;
+      padding: 1px 4px;
+      border-radius: 4px;
+    }
+
+    .q-info { min-width: 0; flex: 1; }
+    .q-name { font-size: 12px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .q-po { font-family: var(--font-mono); font-size: 11px; font-weight: 700; color: var(--red); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    .q-bottom { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; font-size: 10.5px; color: var(--text-muted); }
+
+    .door-pill-sm { padding: 1px 6px; border-radius: 5px; font-family: var(--font-mono); font-size: 10.5px; font-weight: 800; background: var(--emerald-dark); color: #ffffff; }
+    .nodoor-pill-sm { padding: 1px 6px; border-radius: 5px; font-family: var(--font-mono); font-size: 10px; background: #f1f5f9; color: #64748b; }
+
+    .red-tag-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 2px 8px;
+      border-radius: 6px;
+      background: #fee2e2;
+      color: #b91c1c;
+      border: 1px solid #fca5a5;
+      font-size: 10.5px;
+      font-weight: 800;
+    }
+    .red-dot { width: 7px; height: 7px; border-radius: 50%; background: #dc2626; }
+
+    .toolbar-btns { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+
+    /* Touch & Mouse friendly Canvas Viewport */
+    .canvas-viewport {
+      position: relative;
+      flex: 1;
+      min-height: 440px;
+      background-color: #0f172a;
+      background-image: radial-gradient(#334155 1px, transparent 1px);
+      background-size: 18px 18px;
+      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      user-select: none;
+      -webkit-user-select: none;
+      touch-action: none;
+      cursor: grab;
+    }
+    .canvas-viewport.draw-active { cursor: crosshair; }
+    .canvas-viewport:active { cursor: grabbing; }
+    .canvas-viewport.draw-active:active { cursor: crosshair; }
+
+    #grnCanvas {
+      max-width: none;
+      touch-action: none;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.55);
+    }
+
+    .canvas-footer-bar {
+      position: absolute;
+      bottom: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-wrap: wrap;
+      pointer-events: none;
+    }
+
+    .canvas-legend {
+      pointer-events: auto;
+      background: rgba(15, 23, 42, 0.92);
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      padding: 6px 12px;
+      border-radius: 10px;
+      font-size: 11px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .inspector-body {
+      padding: 14px;
+      overflow-y: auto;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .red-extract-card {
+      border: 2px solid var(--red-border);
+      background: var(--red-light);
+      border-radius: 12px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 9px;
+    }
+
+    .card-sec-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: #b91c1c;
+    }
+
+    .field-group label {
+      display: flex;
+      justify-content: space-between;
+      font-size: 11px;
+      font-weight: 700;
+      color: #334155;
+      margin-bottom: 3px;
+    }
+
+    .field-group label span.hint { color: var(--red); font-size: 10px; }
+
+    .red-input {
+      width: 100%;
+      padding: 7px 10px;
+      border-radius: 9px;
+      border: 2px solid #fca5a5;
+      background: #ffffff;
+      font-family: var(--font-mono);
+      font-size: 13px;
+      font-weight: 700;
+      color: #b91c1c;
+    }
+    .red-input:focus {
+      border-color: #dc2626;
+      box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.15);
+      outline: none;
+    }
+
+    .chips-row { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 5px; }
+    .item-chip {
+      background: #dc2626;
+      color: #ffffff;
+      font-family: var(--font-mono);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 6px;
+    }
+
+    /* Smart Locker Barcode + OCR Password Card */
+    .locker-card {
+      border: 2px solid rgba(16, 185, 129, 0.45);
+      background: linear-gradient(145deg, #0f172a, #1e293b);
+      color: #ffffff;
+      border-radius: 12px;
+      padding: 13px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.18);
+    }
+
+    .locker-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .locker-title { font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; color: #6ee7b7; }
+    .locker-sub { font-size: 10.5px; color: #94a3b8; }
+
+    .source-select {
+      padding: 5px 8px;
+      border-radius: 8px;
+      background: #020617;
+      color: #6ee7b7;
+      border: 1px solid #334155;
+      font-size: 11px;
+      font-weight: 700;
+    }
+
+    .scanner-grid { display: grid; grid-template-columns: 1.45fr 1fr; gap: 10px; align-items: end; }
+    .scanner-grid label { display: block; font-size: 11px; font-weight: 600; margin-bottom: 4px; }
+
+    .pw-input {
+      width: 100%;
+      padding: 8px 10px;
+      border-radius: 9px;
+      background: #020617;
+      border: 2px solid rgba(16, 185, 129, 0.65);
+      color: #6ee7b7;
+      font-family: var(--font-mono);
+      font-size: 14.5px;
+      font-weight: 700;
+      letter-spacing: 0.04em;
+    }
+    .pw-input:focus { border-color: #34d399; outline: none; }
+
+    .door-input {
+      width: 100%;
+      padding: 6px 8px;
+      border-radius: 9px;
+      background: #fbbf24;
+      border: 2px solid #fde68a;
+      color: #0f172a;
+      font-family: var(--font-mono);
+      font-size: 19px;
+      font-weight: 900;
+      text-align: center;
+    }
+
+    .locker-tag-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(2, 6, 23, 0.75);
+      border: 1px solid #334155;
+      padding: 7px 10px;
+      border-radius: 9px;
+      font-size: 12px;
+    }
+
+    .barcode-info-box {
+      background: rgba(16, 185, 129, 0.1);
+      border: 1px dashed rgba(52, 211, 153, 0.45);
+      border-radius: 8px;
+      padding: 7px 10px;
+      font-size: 11px;
+      color: #a7f3d0;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .conf-badge {
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-family: var(--font-mono);
+      font-size: 10.5px;
+      font-weight: 800;
+      background: rgba(16, 185, 129, 0.2);
+      color: #6ee7b7;
+    }
+    .conf-badge.low {
+      background: rgba(245, 158, 11, 0.22);
+      color: #fcd34d;
+    }
+
+    /* Master Table Section */
+    .table-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, 0.05);
+      overflow: hidden;
+    }
+
+    .table-toolbar {
+      padding: 14px 16px;
+      background: var(--bg-subtle);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .search-input {
+      padding: 6px 12px;
+      border-radius: 9px;
+      border: 1px solid var(--border-strong);
+      font-size: 12px;
+      width: 230px;
+      background: #ffffff;
+    }
+
+    .table-scroll { overflow-x: auto; max-height: 380px; }
+
+    table { width: 100%; border-collapse: collapse; text-align: left; font-size: 12px; }
+
+    thead th {
+      background: #f1f5f9;
+      position: sticky;
+      top: 0;
+      z-index: 5;
+      padding: 10px 12px;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.03em;
+      color: #475569;
+      border-bottom: 1px solid var(--border);
+    }
+
+    tbody td { padding: 9px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #f8fafc; }
+    tbody tr.selected-row { background: #eff6ff; }
+
+    .status-pill { padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+    .hidden { display: none !important; }
+
+    .drag-overlay {
+      position: fixed;
+      inset: 0;
+      z-index: 60;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(4px);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    .drag-box {
+      border: 3px dashed #f87171;
+      background: #0f172a;
+      color: #ffffff;
+      border-radius: 20px;
+      padding: 40px;
+      text-align: center;
+      max-width: 460px;
+      width: 100%;
+    }
+
+    .toast-container {
+      position: fixed;
+      bottom: 18px;
+      right: 18px;
+      z-index: 70;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      pointer-events: none;
+    }
+    .toast {
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #ffffff;
+      background: #0f172a;
+      border: 1px solid #334155;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+    }
+    .toast.success { background: #064e3b; border-color: #10b981; }
+    .toast.warning { background: #78350f; border-color: #f59e0b; }
+    .toast.error   { background: #7f1d1d; border-color: #ef4444; }
+  </style>
+</head>
+<body>
+
+  <!-- Hidden Multi-File Input (1 to 100+ GRNs) -->
+  <input type="file" id="fileInput" accept="image/jpeg,image/png,image/webp" multiple class="hidden" />
+
+  <!-- Top Enterprise Header -->
+  <header class="topbar">
+    <div class="topbar-inner">
+      <div class="brand-group">
+        <div class="brand-icon">
+          <svg width="22" height="22" fill="none" stroke="#fff" stroke-width="2.2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M3 7V5a2 2 0 012-2h2m10 0h2a2 2 0 012 2v2m0 10v2a2 2 0 01-2 2h-2M7 21H5a2 2 0 01-2-2v-2M7 12h10M9 8h6m-6 8h6" />
+          </svg>
+        </div>
+        <div>
+          <div class="brand-title-row">
+            <span class="brand-title">GRN OCR & Barcode Locker Door Linker v6</span>
+            <span class="badge-sap">99% MULTI-PASS ENGINE</span>
+          </div>
+          <div class="brand-sub">Multi-Angle/Contrast OCR + Smart Sticker Barcode Crop + Validator → PO, Requester, Items, PW & Door #</div>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <div class="kpi-pill">
+          <span class="lbl">Batch:</span>
+          <span id="statTotal" class="val val-white">0</span>
+          <span class="sep">|</span>
+          <span class="lbl">OCR Ready:</span>
+          <span id="statOcrReady" class="val val-amber">0</span>
+          <span class="sep">|</span>
+          <span class="lbl">Door Linked:</span>
+          <span id="statLinked" class="val val-green">0</span>
+        </div>
+
+        <button id="btnUploadTrigger" type="button" class="btn btn-primary">
+          <span>+ Upload GRNs (1–100+)</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Drag & Drop Overlay -->
+  <div id="dragOverlay" class="drag-overlay hidden">
+    <div class="drag-box">
+      <h2 style="font-size:20px; margin-bottom:8px;">Drop Batch GRN Images Here</h2>
+      <p style="font-size:13px; color:#cbd5e1;">Supports 1 to 100+ JPG, PNG, or WEBP receipts with multi-pass OCR, barcode decoding & validation</p>
+    </div>
+  </div>
+
+  <!-- Main Workspace -->
+  <main class="main-wrap">
+
+    <!-- 3-Column Workstation -->
+    <div class="workstation-grid">
+
+      <!-- COLUMN 1: Batch Queue -->
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">
+              <span>GRN Batch Queue</span>
+              <span id="queueCountBadge" class="count-badge">0</span>
+            </div>
+            <div class="panel-sub">Click item to inspect & link locker door</div>
+          </div>
+          <div style="display:flex; gap:5px;">
+            <button id="btnRunBatchOcr" type="button" class="btn btn-dark btn-sm">Scan All</button>
+            <button id="btnClearBatch" type="button" class="btn btn-outline btn-sm" style="color:#dc2626;">Clear All</button>
+          </div>
+        </div>
+
+        <div id="ocrProgressContainer" class="progress-box hidden">
+          <div class="progress-top">
+            <span id="ocrProgressLabel">Running Multi-Pass OCR & Barcode Scan...</span>
+            <span id="ocrProgressPct">0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="ocrProgressBar" class="progress-fill"></div>
+          </div>
+        </div>
+
+        <div id="queueList" class="queue-scroll">
+          <div id="emptyQueueState" class="empty-drop">
+            <p style="font-size:13px; font-weight:700; color:#334155;">No GRN documents loaded</p>
+            <p style="font-size:11.5px; color:#64748b; margin:6px 0 14px;">Click <strong>"+ Upload GRNs (1–100+)"</strong> or drag & drop GRN images anywhere on this page.</p>
+            <button type="button" onclick="document.getElementById('btnUploadTrigger').click()" class="btn btn-primary btn-sm">
+              + Upload GRN Images
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- COLUMN 2: Interactive GRN Canvas with Red Bounding Boxes -->
+      <section class="panel">
+        <div class="panel-header">
+          <div style="display:flex; align-items:center; gap:8px; min-width:0;">
+            <span class="red-tag-pill"><span class="red-dot"></span> RED OCR / BARCODE BOXES</span>
+            <span id="activeFileName" style="font-family:var(--font-mono); font-size:11.5px; font-weight:700; color:#334155; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">No file selected</span>
+          </div>
+
+          <div class="toolbar-btns">
+            <button id="btnRotateLeft" type="button" class="btn btn-outline btn-sm" title="Rotate Left 90°">↺ 90°</button>
+            <button id="btnRotateRight" type="button" class="btn btn-outline btn-sm" title="Rotate Right 90°">↻ 90°</button>
+            <button id="btnZoomOut" type="button" class="btn btn-outline btn-sm" title="Zoom Out">−</button>
+            <button id="btnZoomReset" type="button" class="btn btn-outline btn-sm" title="Fit to Screen">FIT</button>
+            <button id="btnZoomIn" type="button" class="btn btn-outline btn-sm" title="Zoom In">+</button>
+            <button id="btnToggleDrawMode" type="button" class="btn btn-outline btn-sm">▭ Draw Red Box</button>
+            <button id="btnUndoBox" type="button" class="btn btn-outline btn-sm" style="color:#dc2626;" title="Remove Last Red Box">Undo Box</button>
+          </div>
+        </div>
+
+        <div id="canvasViewport" class="canvas-viewport">
+          <canvas id="grnCanvas"></canvas>
+
+          <div class="canvas-footer-bar">
+            <div class="canvas-legend">
+              <span><strong style="color:#f87171;">■</strong> PO / Requester / Item / Barcode PW</span>
+              <span style="color:#94a3b8;">Draw red box over barcode/text to decode</span>
+            </div>
+            <button id="btnReOcrCurrent" type="button" class="btn btn-red btn-sm" style="pointer-events:auto;">
+              ↻ Deep Scan OCR + Barcode
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- COLUMN 3: OCR Extraction & Barcode/OCR Password Locker Linker -->
+      <section class="panel">
+        <div class="panel-header">
+          <div>
+            <div class="panel-title">OCR Extraction & Locker Door Link</div>
+            <div class="panel-sub">Red-highlighted GRN fields & Barcode/OCR password → Door #</div>
+          </div>
+          <div style="display:flex; align-items:center; gap:6px;">
+            <span id="confidenceBadge" class="conf-badge">CONF: —</span>
+            <span id="currentStatusPill" class="status-pill" style="background:#e2e8f0; color:#334155;">IDLE</span>
+          </div>
+        </div>
+
+        <div class="inspector-body">
+
+          <!-- Red Highlighted Fields -->
+          <div class="red-extract-card">
+            <div class="card-sec-head">
+              <span>● Red-Highlighted GRN Data</span>
+              <span id="grnNumberBadge" style="font-family:var(--font-mono); color:#64748b; font-weight:600;">GRN: —</span>
+            </div>
+
+            <div class="field-group">
+              <label for="inputPoNumber">
+                <span>1. PO NUMBER (P/O no: 340...)</span>
+                <span class="hint">● Highlighted Red</span>
+              </label>
+              <input id="inputPoNumber" type="text" placeholder="e.g. 3401245961" class="red-input" />
+            </div>
+
+            <div class="field-group">
+              <label for="inputRequester">
+                <span>2. REQUESTER (ID / username)</span>
+                <span class="hint">● Highlighted Red</span>
+              </label>
+              <input id="inputRequester" type="text" placeholder="e.g. martin.tai or 08057625" class="red-input" />
+            </div>
+
+            <div class="field-group">
+              <label for="inputItemCodes">
+                <span>3. ITEM CODE(S) (X + 9 digits)</span>
+                <span class="hint">● Highlighted Red</span>
+              </label>
+              <input id="inputItemCodes" type="text" placeholder="e.g. XF28100109, XF09100012" class="red-input" />
+              <div id="itemChipsContainer" class="chips-row"></div>
+            </div>
+          </div>
+
+          <!-- Smart Locker Barcode / OCR Password & Auto Door Link Box -->
+          <div class="locker-card">
+            <div class="locker-head">
+              <div>
+                <div class="locker-title">Barcode / OCR Password → Auto Door</div>
+                <div class="locker-sub">Sticker Barcode / OCR PW · Last 2 digits = Door #</div>
+              </div>
+              <select id="selPasswordSource" class="source-select" title="Password Source Priority">
+                <option value="AUTO">Auto (Barcode → OCR)</option>
+                <option value="BARCODE">Barcode Only</option>
+                <option value="OCR">OCR Text Only</option>
+              </select>
+            </div>
+
+            <div class="barcode-info-box">
+              <span id="barcodeStatusText">Barcode: Not detected yet</span>
+              <button id="btnDecodeBarcodeNow" type="button" class="btn btn-emerald btn-sm" style="padding:3px 8px; font-size:10.5px;">
+                || Decode Barcode
+              </button>
+            </div>
+
+            <div class="scanner-grid">
+              <div>
+                <label for="inputLockerPassword" style="color:#cbd5e1;">Password (Barcode / OCR)</label>
+                <input id="inputLockerPassword" type="text" inputmode="numeric" placeholder="e.g. 174466168" class="pw-input" />
+              </div>
+              <div>
+                <label for="inputDoorNumber" style="color:#fcd34d;">Auto Door # (Last 2)</label>
+                <input id="inputDoorNumber" type="text" maxlength="4" placeholder="--" class="door-input" />
+              </div>
+            </div>
+
+            <div class="locker-tag-bar">
+              <div>
+                <span style="color:#94a3b8;">Locker Tag: </span>
+                <strong id="lockerVisualBadge" style="font-family:var(--font-mono); color:#fcd34d; font-size:13.5px;">01柜 · --门</strong>
+              </div>
+              <label style="display:flex; align-items:center; gap:5px; color:#cbd5e1; font-size:11px; cursor:pointer;">
+                <input id="chkAutoAdvance" type="checkbox" checked />
+                <span>Auto-Next</span>
+              </label>
+            </div>
+
+            <button id="btnVerifyAndNext" type="button" class="btn btn-emerald" style="width:100%; padding:10px;">
+              ✓ Confirm Link & Next GRN
+            </button>
+          </div>
+
+          <!-- Raw OCR & Barcode Debug -->
+          <details style="border:1px solid var(--border); border-radius:9px; padding:8px 10px; background:var(--bg-subtle); font-size:11.5px;">
+            <summary style="font-weight:700; color:#475569; cursor:pointer;">View Raw OCR & Barcode Extracted Text</summary>
+            <pre id="rawOcrText" style="margin-top:8px; padding:8px; border-radius:7px; background:#0f172a; color:#cbd5e1; font-family:var(--font-mono); font-size:10px; max-height:110px; overflow:auto; white-space:pre-wrap;">No OCR/barcode data yet.</pre>
+          </details>
+
+        </div>
+      </section>
+
+    </div>
+
+    <!-- BOTTOM MASTER TABLE -->
+    <section class="table-card">
+      <div class="table-toolbar">
+        <div>
+          <div style="display:flex; align-items:center; gap:8px;">
+            <strong style="font-size:14.5px;">Master GRN & Smart Locker Assignment Log</strong>
+            <span id="tableCountBadge" class="count-badge" style="background:#dbeafe; color:#1e40af;">0 Records</span>
+          </div>
+          <div style="font-size:11.5px; color:#64748b; margin-top:2px;">Live synchronized table for 1–100+ GRNs · Delete individual GRNs anytime · Instant CSV/Excel export</div>
+        </div>
+
+        <div style="display:flex; align-items:center; gap:8px; flex-wrap:wrap;">
+          <input id="tableSearchInput" type="text" placeholder="Filter PO, Requester, Item, Door..." class="search-input" />
+          <button id="btnCopyTable" type="button" class="btn btn-outline btn-sm">Copy Summary</button>
+          <button id="btnExportCsv" type="button" class="btn btn-emerald btn-sm">Export CSV / Excel</button>
+        </div>
+      </div>
+
+      <div class="table-scroll">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:44px;">#</th>
+              <th>GRN File / Receipt</th>
+              <th style="color:#b91c1c;">PO Number (Red)</th>
+              <th style="color:#b91c1c;">Requester (Red)</th>
+              <th style="color:#b91c1c;">Item Code(s) (Red)</th>
+              <th>Barcode / OCR PW</th>
+              <th>Auto Door #</th>
+              <th>Confidence</th>
+              <th>Status</th>
+              <th style="text-align:right;">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="masterTableBody">
+            <tr>
+              <td colspan="10" style="padding:28px; text-align:center; color:#94a3b8;">
+                Click <strong>"+ Upload GRNs (1–100+)"</strong> above to load GRN receipts.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+  </main>
+
+  <div id="toastContainer" class="toast-container"></div>
+
+  <script>
+    const AppState = {
+      records: [],
+      activeId: null,
+      isBatchRunning: false,
+      tesseractWorker: null,
+      passwordSourceMode: 'AUTO',
+      canvasTransform: {
+        scale: 1,
+        offsetX: 0,
+        offsetY: 0,
+        isDragging: false,
+        dragStartX: 0,
+        dragStartY: 0,
+        drawMode: false,
+        isDrawingBox: false,
+        boxStartNorm: null,
+        boxCurrentNorm: null
+      }
+    };
+
+    const DOM = {
+      fileInput: document.getElementById('fileInput'),
+      dragOverlay: document.getElementById('dragOverlay'),
+      queueList: document.getElementById('queueList'),
+      emptyQueueState: document.getElementById('emptyQueueState'),
+      queueCountBadge: document.getElementById('queueCountBadge'),
+      statTotal: document.getElementById('statTotal'),
+      statOcrReady: document.getElementById('statOcrReady'),
+      statLinked: document.getElementById('statLinked'),
+      ocrProgressContainer: document.getElementById('ocrProgressContainer'),
+      ocrProgressLabel: document.getElementById('ocrProgressLabel'),
+      ocrProgressPct: document.getElementById('ocrProgressPct'),
+      ocrProgressBar: document.getElementById('ocrProgressBar'),
+      activeFileName: document.getElementById('activeFileName'),
+      canvasViewport: document.getElementById('canvasViewport'),
+      grnCanvas: document.getElementById('grnCanvas'),
+      confidenceBadge: document.getElementById('confidenceBadge'),
+      currentStatusPill: document.getElementById('currentStatusPill'),
+      grnNumberBadge: document.getElementById('grnNumberBadge'),
+      inputPoNumber: document.getElementById('inputPoNumber'),
+      inputRequester: document.getElementById('inputRequester'),
+      inputItemCodes: document.getElementById('inputItemCodes'),
+      itemChipsContainer: document.getElementById('itemChipsContainer'),
+      selPasswordSource: document.getElementById('selPasswordSource'),
+      barcodeStatusText: document.getElementById('barcodeStatusText'),
+      inputLockerPassword: document.getElementById('inputLockerPassword'),
+      inputDoorNumber: document.getElementById('inputDoorNumber'),
+      lockerVisualBadge: document.getElementById('lockerVisualBadge'),
+      chkAutoAdvance: document.getElementById('chkAutoAdvance'),
+      rawOcrText: document.getElementById('rawOcrText'),
+      masterTableBody: document.getElementById('masterTableBody'),
+      tableCountBadge: document.getElementById('tableCountBadge'),
+      tableSearchInput: document.getElementById('tableSearchInput'),
+      toastContainer: document.getElementById('toastContainer')
+    };
+
+    function playBeep(type = 'success') {
+      try {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        if (type === 'success') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(880, ctx.currentTime);
+          osc.frequency.setValueAtTime(1174.66, ctx.currentTime + 0.08);
+          gain.gain.setValueAtTime(0.12, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.25);
+        } else {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(1046.5, ctx.currentTime);
+          gain.gain.setValueAtTime(0.14, ctx.currentTime);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.14);
+          osc.start();
+          osc.stop(ctx.currentTime + 0.14);
+        }
+      } catch (e) {}
+    }
+
+    function showToast(message, variant = 'info') {
+      const toast = document.createElement('div');
+      toast.className = `toast ${variant}`;
+      toast.textContent = message;
+      DOM.toastContainer.appendChild(toast);
+      setTimeout(() => toast.remove(), 3200);
+    }
+
+    function deleteRecordById(id) {
+      AppState.records = AppState.records.filter(item => item.id !== id);
+      if (AppState.activeId === id) {
+        AppState.activeId = AppState.records[0]?.id || null;
+      }
+      renderAll();
+      fitCanvasToViewport();
+      showToast('Deleted GRN record.', 'info');
+    }
+
+    function handleFilesUpload(fileList) {
+      const files = Array.from(fileList).filter(f => f.type.startsWith('image/'));
+      if (files.length === 0) {
+        showToast('Please select valid image files (JPG, PNG, WEBP).', 'warning');
+        return;
+      }
+
+      const cappedFiles = files.slice(0, 150);
+      let loadedCount = 0;
+
+      cappedFiles.forEach((file) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          const img = new Image();
+          img.onload = () => {
+            const autoRotation = img.height > img.width * 1.15 ? 270 : 0;
+            const rec = {
+              id: 'grn_' + Date.now() + '_' + Math.random().toString(36).slice(2, 7),
+              fileName: file.name,
+              imageUrl: e.target.result,
+              imageObj: img,
+              rotation: autoRotation,
+              status: 'QUEUED',
+              confidence: 0,
+              grnNo: '',
+              poNumber: '',
+              requester: '',
+              itemCodes: [],
+              redBoxes: [],
+              barcodePassword: '',
+              ocrPassword: '',
+              lockerPassword: '',
+              doorNumber: '',
+              rawText: 'Queued for Multi-Pass OCR & Barcode scan...'
+            };
+
+            AppState.records.push(rec);
+            loadedCount++;
+            if (!AppState.activeId) AppState.activeId = rec.id;
+
+            if (loadedCount === cappedFiles.length) {
+              renderAll();
+              fitCanvasToViewport();
+              showToast(`Added ${loadedCount} GRN(s). Running 99% Multi-Pass OCR & Barcode scan...`, 'info');
+              runBatchOcrQueue();
+            }
+          };
+          img.src = e.target.result;
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function createRotatedPreprocessedCanvas(imgObj, rotationDeg, cropNorm = null, contrastLevel = 1.45, thresholdMode = false) {
+      const rad = (rotationDeg * Math.PI) / 180;
+      const sin = Math.abs(Math.sin(rad));
+      const cos = Math.abs(Math.cos(rad));
+      const w = imgObj.naturalWidth || imgObj.width;
+      const h = imgObj.naturalHeight || imgObj.height;
+
+      const outW = Math.round(w * cos + h * sin);
+      const outH = Math.round(w * sin + h * cos);
+
+      const fullCanvas = document.createElement('canvas');
+      fullCanvas.width = outW;
+      fullCanvas.height = outH;
+      const ctx = fullCanvas.getContext('2d');
+
+      ctx.fillStyle = '#ffffff';
+      ctx.fillRect(0, 0, outW, outH);
+      ctx.save();
+      ctx.translate(outW / 2, outH / 2);
+      ctx.rotate(rad);
+      ctx.filter = `contrast(${contrastLevel}) brightness(1.06) grayscale(1)`;
+      ctx.drawImage(imgObj, -w / 2, -h / 2, w, h);
+      ctx.restore();
+
+      let outCanvas = fullCanvas;
+      if (cropNorm) {
+        const sx = Math.max(0, Math.floor(cropNorm.x * outW));
+        const sy = Math.max(0, Math.floor(cropNorm.y * outH));
+        const sw = Math.max(24, Math.min(outW - sx, Math.floor(cropNorm.w * outW)));
+        const sh = Math.max(24, Math.min(outH - sy, Math.floor(cropNorm.h * outH)));
+
+        const cropCanvas = document.createElement('canvas');
+        cropCanvas.width = sw * 2;
+        cropCanvas.height = sh * 2;
+        const cCtx = cropCanvas.getContext('2d');
+        cCtx.imageSmoothingEnabled = true;
+        cCtx.imageSmoothingQuality = 'high';
+        cCtx.drawImage(fullCanvas, sx, sy, sw, sh, 0, 0, cropCanvas.width, cropCanvas.height);
+        outCanvas = cropCanvas;
+      }
+
+      if (thresholdMode) {
+        const tCtx = outCanvas.getContext('2d');
+        const imgData = tCtx.getImageData(0, 0, outCanvas.width, outCanvas.height);
+        const d = imgData.data;
+        for (let i = 0; i < d.length; i += 4) {
+          const lum = 0.299 * d[i] + 0.587 * d[i + 1] + 0.114 * d[i + 2];
+          const v = lum < 155 ? 0 : 255;
+          d[i] = d[i + 1] = d[i + 2] = v;
+        }
+        tCtx.putImageData(imgData, 0, 0);
+      }
+
+      return outCanvas;
+    }
+
+    async function decodeBarcodeFromCanvas(canvas) {
+      const candidates = [];
+
+      if ('BarcodeDetector' in window) {
+        try {
+          const detector = new BarcodeDetector({
+            formats: ['code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf', 'codabar']
+          });
+          const detected = await detector.detect(canvas);
+          if (detected && detected.length > 0) {
+            detected.forEach((d) => {
+              if (d.rawValue) {
+                const cp = d.cornerPoints || [];
+                let normBox = null;
+                if (cp.length > 0) {
+                  const xs = cp.map(p => p.x);
+                  const ys = cp.map(p => p.y);
+                  const minX = Math.min(...xs);
+                  const maxX = Math.max(...xs);
+                  const minY = Math.min(...ys);
+                  const maxY = Math.max(...ys);
+                  normBox = {
+                    x: Math.max(0, (minX - 8) / canvas.width),
+                    y: Math.max(0, (minY - 6) / canvas.height),
+                    w: Math.min(1, (maxX - minX + 16) / canvas.width),
+                    h: Math.min(1, (maxY - minY + 12) / canvas.height)
+                  };
+                }
+                candidates.push({ value: d.rawValue.trim(), box: normBox });
+              }
+            });
+          }
+        } catch (e) {}
+      }
+
+      if (candidates.length === 0 && window.ZXingBrowser) {
+        try {
+          const reader = new ZXingBrowser.BrowserMultiFormatReader();
+          const dataUrl = canvas.toDataURL('image/png');
+          const imgEl = new Image();
+          await new Promise((resolve) => {
+            imgEl.onload = resolve;
+            imgEl.onerror = resolve;
+            imgEl.src = dataUrl;
+          });
+          if (imgEl.naturalWidth > 0) {
+            const res = await reader.decodeFromImageElement(imgEl);
+            if (res && res.getText()) {
+              candidates.push({ value: res.getText().trim(), box: null });
+            }
+          }
+        } catch (e) {}
+      }
+
+      return candidates;
+    }
+
+    function sanitizeBarcodeToken(rawVal) {
+      let cleaned = (rawVal || '').replace(/\s+/g, '');
+      const numMatch = cleaned.match(/\d{6,12}/);
+      if (numMatch) cleaned = numMatch[0];
+      if (cleaned.length > 9 && cleaned.endsWith('00')) {
+        cleaned = cleaned.slice(0, -2);
+      }
+      return cleaned;
+    }
+
+    function resolvePasswordForRecord(rec, shouldAdvance = false) {
+      if (!rec) return;
+      const mode = AppState.passwordSourceMode;
+      let chosenPw = '';
+
+      if (mode === 'BARCODE') {
+        chosenPw = rec.barcodePassword || '';
+      } else if (mode === 'OCR') {
+        chosenPw = rec.ocrPassword || '';
+      } else {
+        chosenPw = rec.barcodePassword || rec.ocrPassword || '';
+      }
+
+      if (chosenPw) {
+        applyPasswordAndLastTwoDigits(rec, chosenPw, shouldAdvance);
+      } else {
+        renderAll();
+      }
+    }
+
+    function extractGrnFieldsAndBoxes(ocrData, imgWidth, imgHeight) {
+      const fullText = ocrData.text || '';
+      const words = ocrData.words || [];
+      const redBoxes = [];
+
+      // 1. GRN Receipt No (500xxxxxxx)
+      const grnMatch = fullText.match(/\b(500\d{7})\b/);
+      const grnNo = grnMatch ? grnMatch[1] : '';
+
+      // 2. PO Number (340xxxxxxx) - normalize common OCR digit confusions inside PO prefix
+      let poNumber = '';
+      const rawPoMatch = fullText.match(/P\/O\s*no[:.\s]*([38][490][0O]\d{7})/i) || fullText.match(/\b([38][490][0O]\d{7})\b/);
+      if (rawPoMatch) {
+        let candPo = rawPoMatch[1].replace(/[Oo]/g, '0');
+        if (candPo.startsWith('840')) candPo = '340' + candPo.slice(3);
+        poNumber = candPo;
+      }
+
+      // 3. Item Codes (X + alphanumeric/digit, 10 chars total, e.g., XF15100110, XA02100058, XF28100109)
+      const itemRegex = /\b(X[A-Z0-9]{9})\b/gi;
+      const itemSet = new Set();
+      let m;
+      while ((m = itemRegex.exec(fullText)) !== null) {
+        const code = m[1].toUpperCase();
+        // Filter out non-item words like X75X250MM
+        if (!code.includes('MM') && !code.includes('BOX') && !code.includes('PCS')) {
+          itemSet.add(code);
+        }
+      }
+      const itemCodes = Array.from(itemSet);
+
+      // 4. Requester (email/username like martin.tai / charlotte.u OR 8-digit staff ID like 08057625)
+      let requester = '';
+      const reqBlockMatch = fullText.match(/Requestor[\s\S]{0,160}?\b([a-z]{2,16}\.[a-z]{1,12}|0\d{7})\b/i);
+      if (reqBlockMatch) {
+        requester = reqBlockMatch[1];
+      } else {
+        const dotUser = fullText.match(/\b([a-z]{3,15}\.[a-z]{1,12})\b/);
+        const empId = fullText.match(/\b(08\d{6})\b/);
+        if (dotUser && !dotUser[1].includes('com') && !dotUser[1].includes('ltd') && !dotUser[1].includes('mop')) {
+          requester = dotUser[1];
+        } else if (empId) {
+          requester = empId[1];
+        }
+      }
+
+      // 5. OCR Password candidate (sticker 9-digit number like 174466168 or explicit PW label)
+      let ocrPassword = '';
+      const labeledPw = fullText.match(/(?:PW|Password|Passcode|PIN)[:\s#]*([0-9]{4,12})/i);
+      if (labeledPw) {
+        ocrPassword = labeledPw[1].trim();
+      } else {
+        const pwCandidates = fullText.match(/\b\d{8,10}\b/g) || [];
+        for (const cand of pwCandidates) {
+          if (cand !== poNumber && cand !== grnNo && !cand.startsWith('08') && !cand.startsWith('803')) {
+            ocrPassword = (cand.length > 9 && cand.endsWith('00')) ? cand.slice(0, -2) : cand;
+            break;
+          }
+        }
+      }
+
+      // Calculate confidence score based on validated fields
+      let score = 0;
+      if (/^340\d{7}$/.test(poNumber)) score += 35;
+      if (itemCodes.length > 0) score += 30;
+      if (requester) score += 15;
+      if (ocrPassword) score += 20;
+
+      words.forEach((wObj) => {
+        const clean = (wObj.text || '').replace(/[^a-zA-Z0-9.]/g, '');
+        if (!clean || !wObj.bbox) return;
+
+        const padX = 6;
+        const padY = 4;
+        const normBox = {
+          x: Math.max(0, (wObj.bbox.x0 - padX) / imgWidth),
+          y: Math.max(0, (wObj.bbox.y0 - padY) / imgHeight),
+          w: Math.min(1, (wObj.bbox.x1 - wObj.bbox.x0 + padX * 2) / imgWidth),
+          h: Math.min(1, (wObj.bbox.y1 - wObj.bbox.y0 + padY * 2) / imgHeight)
+        };
+
+        if (poNumber && clean.includes(poNumber)) {
+          redBoxes.push({ label: `PO: ${poNumber}`, ...normBox });
+        } else if (requester && clean.toLowerCase() === requester.toLowerCase()) {
+          redBoxes.push({ label: `REQ: ${requester}`, ...normBox });
+        } else if (itemCodes.some(code => clean.toUpperCase().includes(code))) {
+          const matchedCode = itemCodes.find(code => clean.toUpperCase().includes(code));
+          redBoxes.push({ label: `ITEM: ${matchedCode}`, ...normBox });
+        } else if (ocrPassword && clean.includes(ocrPassword)) {
+          redBoxes.push({ label: `PW: ${ocrPassword}`, ...normBox });
+        }
+      });
+
+      return { grnNo, poNumber, requester, itemCodes, ocrPassword, redBoxes, rawText: fullText, score };
+    }
+
+    async function runOcrAndBarcodeOnRecord(record, cropNorm = null, deepScan = false) {
+      if (!record || !record.imageObj) return;
+      record.status = 'SCANNING';
+      renderQueue();
+      if (record.id === AppState.activeId) updateInspectorPanel();
+
+      // Pass 1: Standard high-contrast canvas
+      const pass1Canvas = createRotatedPreprocessedCanvas(record.imageObj, record.rotation, cropNorm, 1.45, false);
+
+      // Decode barcode on Pass 1 (and sticker zone if no crop is provided)
+      let barcodes = await decodeBarcodeFromCanvas(pass1Canvas);
+      if (barcodes.length === 0 && !cropNorm) {
+        // Also try high-threshold scan on full receipt & lower/side sticker region
+        const threshCanvas = createRotatedPreprocessedCanvas(record.imageObj, record.rotation, null, 1.8, true);
+        barcodes = await decodeBarcodeFromCanvas(threshCanvas);
+      }
+
+      const barcodeBoxes = [];
+      if (barcodes.length > 0) {
+        const bcVal = sanitizeBarcodeToken(barcodes[0].value);
+        record.barcodePassword = bcVal;
+        if (barcodes[0].box && !cropNorm) {
+          barcodeBoxes.push({ label: `BARCODE PW: ${bcVal}`, ...barcodes[0].box });
+        } else if (cropNorm) {
+          barcodeBoxes.push({ label: `BARCODE PW: ${bcVal}`, ...cropNorm, manual: true });
+        }
+      }
+
+      try {
+        if (typeof Tesseract === 'undefined') {
+          throw new Error('Offline mode: Tesseract OCR script could not load from CDN.');
+        }
+        if (!AppState.tesseractWorker) {
+          AppState.tesseractWorker = await Tesseract.createWorker('eng');
+        }
+
+        let result = await AppState.tesseractWorker.recognize(pass1Canvas);
+        let extracted = extractGrnFieldsAndBoxes(result.data, pass1Canvas.width, pass1Canvas.height);
+
+        // Pass 2: If deepScan or key fields missing (PO / Item / Requester), retry with high-contrast binarized pass
+        const needsRetry = deepScan || !extracted.poNumber || extracted.itemCodes.length === 0 || !extracted.requester;
+        if (needsRetry && !cropNorm) {
+          const pass2Canvas = createRotatedPreprocessedCanvas(record.imageObj, record.rotation, null, 1.85, true);
+          const result2 = await AppState.tesseractWorker.recognize(pass2Canvas);
+          const extracted2 = extractGrnFieldsAndBoxes(result2.data, pass2Canvas.width, pass2Canvas.height);
+
+          extracted.grnNo = extracted.grnNo || extracted2.grnNo;
+          extracted.poNumber = extracted.poNumber || extracted2.poNumber;
+          extracted.requester = extracted.requester || extracted2.requester;
+          extracted.ocrPassword = extracted.ocrPassword || extracted2.ocrPassword;
+          const mergedItems = Array.from(new Set([...extracted.itemCodes, ...extracted2.itemCodes]));
+          extracted.itemCodes = mergedItems;
+          extracted.score = Math.max(extracted.score, extracted2.score);
+          if (result2.data.text && result2.data.text.length > (result.data.text || '').length) {
+            extracted.rawText = result2.data.text;
+          }
+        }
+
+        if (!cropNorm) {
+          record.grnNo = extracted.grnNo || record.grnNo;
+          record.poNumber = extracted.poNumber || record.poNumber;
+          record.requester = extracted.requester || record.requester;
+          if (extracted.itemCodes.length > 0) record.itemCodes = extracted.itemCodes;
+          record.ocrPassword = extracted.ocrPassword || record.ocrPassword;
+
+          const manualBoxes = (record.redBoxes || []).filter(b => b.manual);
+          record.redBoxes = [...extracted.redBoxes, ...barcodeBoxes, ...manualBoxes];
+          record.rawText =
+            `[Barcode Detected]: ${record.barcodePassword || 'None'}\n` +
+            `[OCR Password]: ${record.ocrPassword || 'None'}\n\n` +
+            extracted.rawText;
+        } else {
+          if (extracted.ocrPassword) record.ocrPassword = extracted.ocrPassword;
+          record.redBoxes = [...(record.redBoxes || []), ...barcodeBoxes];
+          record.rawText =
+            `[Region Barcode]: ${record.barcodePassword || 'None'}\n` +
+            `[Region OCR]: ${extracted.ocrPassword || extracted.rawText}\n\n` +
+            (record.rawText || '');
+        }
+
+        let conf = extracted.score;
+        if (record.barcodePassword) conf = Math.min(99, conf + 15);
+        record.confidence = Math.min(99, Math.max(conf, (record.poNumber || record.itemCodes.length > 0) ? 75 : 25));
+      } catch (err) {
+        record.confidence = record.barcodePassword ? 60 : 15;
+        record.rawText =
+          `[Barcode Detected]: ${record.barcodePassword || 'None'}\n` +
+          (err.message || 'Unable to parse OCR text');
+      }
+
+      const mode = AppState.passwordSourceMode;
+      const chosen =
+        mode === 'BARCODE'
+          ? record.barcodePassword
+          : mode === 'OCR'
+          ? record.ocrPassword
+          : (record.barcodePassword || record.ocrPassword);
+
+      if (chosen) {
+        applyPasswordAndLastTwoDigits(record, chosen, false);
+      } else {
+        record.status = record.doorNumber ? 'VERIFIED' : 'OCR_READY';
+        renderAll();
+      }
+    }
+
+    async function runBatchOcrQueue() {
+      if (AppState.isBatchRunning) return;
+      const pending = AppState.records.filter(r => r.status === 'QUEUED');
+      if (pending.length === 0) return;
+
+      AppState.isBatchRunning = true;
+      DOM.ocrProgressContainer.classList.remove('hidden');
+
+      for (let i = 0; i < pending.length; i++) {
+        const pct = Math.round((i / pending.length) * 100);
+        DOM.ocrProgressLabel.textContent = `Scanning GRN ${i + 1} of ${pending.length}...`;
+        DOM.ocrProgressPct.textContent = `${pct}%`;
+        DOM.ocrProgressBar.style.width = `${pct}%`;
+        await runOcrAndBarcodeOnRecord(pending[i], null, false);
+      }
+
+      DOM.ocrProgressLabel.textContent = 'Batch Scan Complete!';
+      DOM.ocrProgressPct.textContent = '100%';
+      DOM.ocrProgressBar.style.width = '100%';
+
+      setTimeout(() => DOM.ocrProgressContainer.classList.add('hidden'), 1500);
+      AppState.isBatchRunning = false;
+      playBeep('success');
+      showToast(`Completed 99% Multi-Pass scan on ${pending.length} GRN(s)!`, 'success');
+    }
+
+    function applyPasswordAndLastTwoDigits(rec, rawPassword, shouldAdvance = false) {
+      if (!rec) return;
+      const cleaned = (rawPassword || '').trim();
+      rec.lockerPassword = cleaned;
+
+      const digitsOnly = cleaned.replace(/\D/g, '');
+      if (digitsOnly.length >= 2) {
+        const lastTwo = digitsOnly.slice(-2);
+        rec.doorNumber = lastTwo;
+        rec.status = 'VERIFIED';
+        playBeep('scan');
+      } else {
+        rec.doorNumber = '';
+        if (rec.status === 'VERIFIED') rec.status = 'OCR_READY';
+      }
+
+      renderAll();
+
+      if (shouldAdvance && DOM.chkAutoAdvance.checked && digitsOnly.length >= 2) {
+        setTimeout(() => advanceToNextGrn(), 260);
+      }
+    }
+
+    function advanceToNextGrn() {
+      if (AppState.records.length === 0) return;
+      const idx = AppState.records.findIndex(r => r.id === AppState.activeId);
+      const nextUnverified = AppState.records.slice(idx + 1).find(r => !r.doorNumber)
+        || AppState.records.find(r => !r.doorNumber);
+
+      if (nextUnverified) {
+        selectRecord(nextUnverified.id);
+      } else if (idx + 1 < AppState.records.length) {
+        selectRecord(AppState.records[idx + 1].id);
+      } else {
+        showToast('All GRNs in batch have been processed!', 'success');
+      }
+    }
+
+    function getActiveRecord() {
+      return AppState.records.find(r => r.id === AppState.activeId) || null;
+    }
+
+    function fitCanvasToViewport() {
+      const rec = getActiveRecord();
+      if (!rec || !rec.imageObj) return;
+
+      const vpW = Math.max(280, DOM.canvasViewport.clientWidth - 28);
+      const vpH = Math.max(280, DOM.canvasViewport.clientHeight - 54);
+      const isRotated90 = rec.rotation % 180 !== 0;
+      const imgW = isRotated90 ? rec.imageObj.height : rec.imageObj.width;
+      const imgH = isRotated90 ? rec.imageObj.width : rec.imageObj.height;
+
+      AppState.canvasTransform.scale = Math.min(vpW / imgW, vpH / imgH, 1.5);
+      AppState.canvasTransform.offsetX = 0;
+      AppState.canvasTransform.offsetY = 0;
+      renderCanvas();
+    }
+
+    function renderCanvas() {
+      const canvas = DOM.grnCanvas;
+      const ctx = canvas.getContext('2d');
+      const rec = getActiveRecord();
+
+      if (!rec || !rec.imageObj) {
+        canvas.width = 440;
+        canvas.height = 260;
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.fillStyle = '#94a3b8';
+        ctx.font = '600 13px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Upload GRN image(s) to inspect & draw Red Boxes', canvas.width / 2, canvas.height / 2);
+        return;
+      }
+
+      const isRotated90 = rec.rotation % 180 !== 0;
+      const baseW = isRotated90 ? rec.imageObj.height : rec.imageObj.width;
+      const baseH = isRotated90 ? rec.imageObj.width : rec.imageObj.height;
+
+      const scale = AppState.canvasTransform.scale;
+      canvas.width = Math.max(100, Math.round(baseW * scale));
+      canvas.height = Math.max(100, Math.round(baseH * scale));
+      canvas.style.transform = `translate(${AppState.canvasTransform.offsetX}px, ${AppState.canvasTransform.offsetY}px)`;
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate((rec.rotation * Math.PI) / 180);
+      const drawW = isRotated90 ? canvas.height : canvas.width;
+      const drawH = isRotated90 ? canvas.width : canvas.height;
+      ctx.drawImage(rec.imageObj, -drawW / 2, -drawH / 2, drawW, drawH);
+      ctx.restore();
+
+      (rec.redBoxes || []).forEach((box) => {
+        const bx = box.x * canvas.width;
+        const by = box.y * canvas.height;
+        const bw = box.w * canvas.width;
+        const bh = box.h * canvas.height;
+
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.20)';
+        ctx.fillRect(bx, by, bw, bh);
+
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(bx, by, bw, bh);
+
+        if (box.label) {
+          ctx.font = 'bold 11px monospace';
+          const textWidth = ctx.measureText(box.label).width;
+          const tagH = 18;
+          const tagY = Math.max(2, by - tagH - 2);
+
+          ctx.fillStyle = '#dc2626';
+          ctx.fillRect(bx, tagY, textWidth + 10, tagH);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(box.label, bx + 5, tagY + 13);
+        }
+      });
+
+      if (AppState.canvasTransform.isDrawingBox && AppState.canvasTransform.boxStartNorm && AppState.canvasTransform.boxCurrentNorm) {
+        const s = AppState.canvasTransform.boxStartNorm;
+        const c = AppState.canvasTransform.boxCurrentNorm;
+        const rx = Math.min(s.x, c.x) * canvas.width;
+        const ry = Math.min(s.y, c.y) * canvas.height;
+        const rw = Math.abs(c.x - s.x) * canvas.width;
+        const rh = Math.abs(c.y - s.y) * canvas.height;
+
+        ctx.fillStyle = 'rgba(239, 68, 68, 0.25)';
+        ctx.fillRect(rx, ry, rw, rh);
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 3;
+        ctx.setLineDash([6, 4]);
+        ctx.strokeRect(rx, ry, rw, rh);
+        ctx.setLineDash([]);
+      }
+    }
+
+    function getNormalizedCanvasCoords(clientX, clientY) {
+      const rect = DOM.grnCanvas.getBoundingClientRect();
+      if (!rect.width || !rect.height) return { x: 0, y: 0 };
+      return {
+        x: Math.max(0, Math.min(1, (clientX - rect.left) / rect.width)),
+        y: Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+      };
+    }
+
+    DOM.grnCanvas.addEventListener('pointerdown', (e) => {
+      const rec = getActiveRecord();
+      if (!rec || !rec.imageObj) return;
+      e.preventDefault();
+      DOM.grnCanvas.setPointerCapture(e.pointerId);
+
+      const norm = getNormalizedCanvasCoords(e.clientX, e.clientY);
+      if (AppState.canvasTransform.drawMode) {
+        AppState.canvasTransform.isDrawingBox = true;
+        AppState.canvasTransform.boxStartNorm = norm;
+        AppState.canvasTransform.boxCurrentNorm = norm;
+      } else {
+        AppState.canvasTransform.isDragging = true;
+        AppState.canvasTransform.dragStartX = e.clientX - AppState.canvasTransform.offsetX;
+        AppState.canvasTransform.dragStartY = e.clientY - AppState.canvasTransform.offsetY;
+      }
+    });
+
+    DOM.grnCanvas.addEventListener('pointermove', (e) => {
+      if (AppState.canvasTransform.isDrawingBox) {
+        e.preventDefault();
+        AppState.canvasTransform.boxCurrentNorm = getNormalizedCanvasCoords(e.clientX, e.clientY);
+        renderCanvas();
+      } else if (AppState.canvasTransform.isDragging) {
+        e.preventDefault();
+        AppState.canvasTransform.offsetX = e.clientX - AppState.canvasTransform.dragStartX;
+        AppState.canvasTransform.offsetY = e.clientY - AppState.canvasTransform.dragStartY;
+        renderCanvas();
+      }
+    });
+
+    DOM.grnCanvas.addEventListener('pointerup', async (e) => {
+      if (DOM.grnCanvas.hasPointerCapture(e.pointerId)) {
+        DOM.grnCanvas.releasePointerCapture(e.pointerId);
+      }
+      if (AppState.canvasTransform.isDrawingBox) {
+        const rec = getActiveRecord();
+        const s = AppState.canvasTransform.boxStartNorm;
+        const c = AppState.canvasTransform.boxCurrentNorm;
+        if (rec && s && c) {
+          const w = Math.abs(c.x - s.x);
+          const h = Math.abs(c.y - s.y);
+          if (w > 0.008 && h > 0.008) {
+            const cropBox = {
+              x: Math.min(s.x, c.x),
+              y: Math.min(s.y, c.y),
+              w,
+              h
+            };
+            rec.redBoxes.push({
+              label: 'RED HIGHLIGHT',
+              ...cropBox,
+              manual: true
+            });
+            renderCanvas();
+            showToast('Zoom-scanning red box for barcode & OCR...', 'info');
+            await runOcrAndBarcodeOnRecord(rec, cropBox, false);
+          }
+        }
+        AppState.canvasTransform.isDrawingBox = false;
+        AppState.canvasTransform.boxStartNorm = null;
+        AppState.canvasTransform.boxCurrentNorm = null;
+        renderCanvas();
+      }
+      AppState.canvasTransform.isDragging = false;
+    });
+
+    function selectRecord(id) {
+      AppState.activeId = id;
+      updateInspectorPanel();
+      fitCanvasToViewport();
+      renderQueue();
+      renderMasterTable();
+    }
+
+    function updateInspectorPanel() {
+      const rec = getActiveRecord();
+      if (!rec) {
+        DOM.activeFileName.textContent = 'No file selected';
+        DOM.confidenceBadge.textContent = 'CONF: —';
+        DOM.confidenceBadge.className = 'conf-badge';
+        DOM.currentStatusPill.textContent = 'IDLE';
+        DOM.currentStatusPill.style.background = '#e2e8f0';
+        DOM.currentStatusPill.style.color = '#334155';
+        DOM.grnNumberBadge.textContent = 'GRN: —';
+        DOM.inputPoNumber.value = '';
+        DOM.inputRequester.value = '';
+        DOM.inputItemCodes.value = '';
+        DOM.itemChipsContainer.innerHTML = '';
+        DOM.barcodeStatusText.textContent = 'Barcode: Not detected yet';
+        DOM.inputLockerPassword.value = '';
+        DOM.inputDoorNumber.value = '';
+        DOM.lockerVisualBadge.textContent = '01柜 · --门';
+        DOM.rawOcrText.textContent = 'No OCR/barcode data yet.';
+        return;
+      }
+
+      DOM.activeFileName.textContent = rec.fileName;
+      const conf = rec.confidence || 0;
+      DOM.confidenceBadge.textContent = conf ? `CONF: ${conf}%` : 'CONF: —';
+      DOM.confidenceBadge.className = conf >= 80 ? 'conf-badge' : 'conf-badge low';
+
+      DOM.grnNumberBadge.textContent = rec.grnNo ? `GRN: ${rec.grnNo}` : 'GRN: Auto';
+      DOM.inputPoNumber.value = rec.poNumber || '';
+      DOM.inputRequester.value = rec.requester || '';
+      DOM.inputItemCodes.value = (rec.itemCodes || []).join(', ');
+      DOM.barcodeStatusText.textContent = rec.barcodePassword
+        ? `Barcode: ${rec.barcodePassword}`
+        : (rec.ocrPassword ? `OCR PW: ${rec.ocrPassword}` : 'Barcode: Draw red box over barcode');
+      DOM.inputLockerPassword.value = rec.lockerPassword || '';
+      DOM.inputDoorNumber.value = rec.doorNumber || '';
+      DOM.lockerVisualBadge.textContent = rec.doorNumber ? `01柜 · ${rec.doorNumber}门` : '01柜 · --门';
+      DOM.rawOcrText.textContent = rec.rawText || '';
+
+      const statusStyles = {
+        QUEUED: ['QUEUED', '#e2e8f0', '#334155'],
+        SCANNING: ['SCANNING...', '#fef3c7', '#92400e'],
+        OCR_READY: ['OCR READY', '#dbeafe', '#1e40af'],
+        VERIFIED: ['DOOR LINKED', '#d1fae5', '#065f46']
+      };
+      const [label, bg, fg] = statusStyles[rec.status] || statusStyles.QUEUED;
+      DOM.currentStatusPill.textContent = label;
+      DOM.currentStatusPill.style.background = bg;
+      DOM.currentStatusPill.style.color = fg;
+
+      DOM.itemChipsContainer.innerHTML = '';
+      (rec.itemCodes || []).forEach((code) => {
+        const chip = document.createElement('span');
+        chip.className = 'item-chip';
+        chip.textContent = code;
+        DOM.itemChipsContainer.appendChild(chip);
+      });
+    }
+
+    function renderQueue() {
+      const total = AppState.records.length;
+      const ocrReady = AppState.records.filter(r => r.status === 'OCR_READY' || r.status === 'VERIFIED').length;
+      const linked = AppState.records.filter(r => Boolean(r.doorNumber)).length;
+
+      DOM.queueCountBadge.textContent = total;
+      DOM.statTotal.textContent = total;
+      DOM.statOcrReady.textContent = ocrReady;
+      DOM.statLinked.textContent = linked;
+
+      if (total === 0) {
+        DOM.emptyQueueState.classList.remove('hidden');
+        Array.from(DOM.queueList.querySelectorAll('.queue-card')).forEach(el => el.remove());
+        return;
+      }
+
+      DOM.emptyQueueState.classList.add('hidden');
+      DOM.queueList.innerHTML = '';
+
+      AppState.records.forEach((rec, index) => {
+        const isActive = rec.id === AppState.activeId;
+        const card = document.createElement('div');
+        card.className = `queue-card ${isActive ? 'active' : ''}`;
+        card.onclick = () => selectRecord(rec.id);
+
+        const doorBadge = rec.doorNumber
+          ? `<span class="door-pill-sm">Door ${rec.doorNumber}</span>`
+          : `<span class="nodoor-pill-sm">No Door</span>`;
+
+        card.innerHTML = `
+          <div class="thumb-wrap">
+            <img src="${rec.imageUrl}" alt="${rec.fileName}" />
+            <span class="thumb-idx">#${index + 1}</span>
+          </div>
+          <div class="q-info">
+            <div style="display:flex; align-items:center; justify-content:space-between; gap:6px;">
+              <div class="q-name">${rec.fileName}</div>
+              <button type="button" class="btn btn-outline btn-sm btn-del-q" style="color:#dc2626; padding:1px 6px; font-size:10px;">Del</button>
+            </div>
+            <div class="q-po">PO: ${rec.poNumber || '—'} · ${rec.requester || '—'}</div>
+            <div class="q-bottom">
+              <span>${rec.itemCodes.length} item(s)</span>
+              ${doorBadge}
+            </div>
+          </div>
+        `;
+
+        card.querySelector('.btn-del-q').onclick = (e) => {
+          e.stopPropagation();
+          deleteRecordById(rec.id);
+        };
+
+        DOM.queueList.appendChild(card);
+      });
+    }
+
+    function renderMasterTable() {
+      const query = (DOM.tableSearchInput.value || '').trim().toLowerCase();
+      const filtered = AppState.records.filter((r) => {
+        if (!query) return true;
+        return (
+          r.fileName.toLowerCase().includes(query) ||
+          (r.poNumber || '').toLowerCase().includes(query) ||
+          (r.requester || '').toLowerCase().includes(query) ||
+          (r.itemCodes || []).join(' ').toLowerCase().includes(query) ||
+          (r.lockerPassword || '').toLowerCase().includes(query) ||
+          (r.doorNumber || '').toLowerCase().includes(query)
+        );
+      });
+
+      DOM.tableCountBadge.textContent = `${filtered.length} Record${filtered.length === 1 ? '' : 's'}`;
+
+      if (filtered.length === 0) {
+        DOM.masterTableBody.innerHTML = `
+          <tr>
+            <td colspan="10" style="padding:28px; text-align:center; color:#94a3b8;">
+              No GRN records in table. Click <strong>"+ Upload GRNs (1–100+)"</strong> above to add receipts.
+            </td>
+          </tr>
+        `;
+        return;
+      }
+
+      DOM.masterTableBody.innerHTML = '';
+      filtered.forEach((rec, idx) => {
+        const isSelected = rec.id === AppState.activeId;
+        const tr = document.createElement('tr');
+        if (isSelected) tr.className = 'selected-row';
+        tr.onclick = () => selectRecord(rec.id);
+
+        const itemBadges = (rec.itemCodes || []).length > 0
+          ? rec.itemCodes.map(c => `<span style="display:inline-block; padding:2px 6px; margin:1px 3px 1px 0; border-radius:5px; background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; font-family:var(--font-mono); font-weight:700; font-size:11px;">${c}</span>`).join('')
+          : '<span style="color:#94a3b8;">—</span>';
+
+        const doorCell = rec.doorNumber
+          ? `<span style="display:inline-block; padding:2px 9px; border-radius:7px; background:#fbbf24; color:#0f172a; font-family:var(--font-mono); font-weight:800; border:1px solid #f59e0b;">Door ${rec.doorNumber}</span>`
+          : '<span style="color:#94a3b8; font-family:var(--font-mono);">Pending</span>';
+
+        const confVal = rec.confidence || 0;
+        const confCell = `<span style="font-family:var(--font-mono); font-weight:700; color:${confVal >= 80 ? '#059669' : '#d97706'};">${confVal ? confVal + '%' : '—'}</span>`;
+
+        const statusCell = rec.doorNumber
+          ? '<span class="status-pill" style="background:#d1fae5; color:#065f46;">Verified</span>'
+          : '<span class="status-pill" style="background:#fef3c7; color:#92400e;">OCR Ready</span>';
+
+        tr.innerHTML = `
+          <td style="font-family:var(--font-mono); font-weight:700; color:#64748b;">${idx + 1}</td>
+          <td style="font-weight:600; max-width:170px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;" title="${rec.fileName}">${rec.fileName}</td>
+          <td style="font-family:var(--font-mono); font-weight:700; color:#b91c1c;">${rec.poNumber || '—'}</td>
+          <td style="font-family:var(--font-mono); font-weight:700; color:#b91c1c;">${rec.requester || '—'}</td>
+          <td>${itemBadges}</td>
+          <td style="font-family:var(--font-mono); font-weight:600;">${rec.lockerPassword || '—'}</td>
+          <td>${doorCell}</td>
+          <td>${confCell}</td>
+          <td>${statusCell}</td>
+          <td style="text-align:right;">
+            <button type="button" class="btn btn-outline btn-sm btn-del-row" style="color:#dc2626; padding:3px 8px;">Delete</button>
+          </td>
+        `;
+
+        tr.querySelector('.btn-del-row').onclick = (e) => {
+          e.stopPropagation();
+          deleteRecordById(rec.id);
+        };
+
+        DOM.masterTableBody.appendChild(tr);
+      });
+    }
+
+    function renderAll() {
+      renderQueue();
+      updateInspectorPanel();
+      renderCanvas();
+      renderMasterTable();
+    }
+
+    function exportBatchCsv() {
+      if (AppState.records.length === 0) {
+        showToast('No GRN records to export.', 'warning');
+        return;
+      }
+
+      const headers = ['No', 'GRN File', 'GRN Receipt No', 'PO Number', 'Requester', 'Item Codes', 'Barcode/OCR Password', 'Auto Door Number', 'Confidence', 'Status'];
+      const rows = AppState.records.map((r, i) => [
+        i + 1,
+        `"${(r.fileName || '').replace(/"/g, '""')}"`,
+        `"${r.grnNo || ''}"`,
+        `"${r.poNumber || ''}"`,
+        `"${r.requester || ''}"`,
+        `"${(r.itemCodes || []).join('; ')}"`,
+        `"${r.lockerPassword || ''}"`,
+        `"${r.doorNumber || ''}"`,
+        `"${r.confidence || 0}%"`,
+        `"${r.doorNumber ? 'Verified' : 'OCR Ready'}"`
+      ]);
+
+      const csvContent = '\uFEFF' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `GRN_SmartLocker_Batch_${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      showToast(`Exported ${AppState.records.length} GRN records to CSV/Excel!`, 'success');
+    }
+
+    function copyBatchSummary() {
+      if (AppState.records.length === 0) {
+        showToast('No records to copy.', 'warning');
+        return;
+      }
+
+      const lines = AppState.records.map((r, i) =>
+        `${i + 1}. PO: ${r.poNumber || 'N/A'} | Req: ${r.requester || 'N/A'} | Items: ${(r.itemCodes || []).join(',') || 'N/A'} | PW: ${r.lockerPassword || 'N/A'} -> Door #${r.doorNumber || '--'}`
+      );
+      const ta = document.createElement('textarea');
+      ta.value = lines.join('\n');
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+
+      showToast('Copied batch summary to clipboard!', 'success');
+    }
+
+    // Event Bindings
+    document.getElementById('btnUploadTrigger').addEventListener('click', () => DOM.fileInput.click());
+    DOM.fileInput.addEventListener('change', (e) => {
+      handleFilesUpload(e.target.files);
+      e.target.value = '';
+    });
+
+    document.getElementById('btnRunBatchOcr').addEventListener('click', () => {
+      AppState.records.forEach(r => { r.status = 'QUEUED'; });
+      runBatchOcrQueue();
+    });
+
+    document.getElementById('btnClearBatch').addEventListener('click', () => {
+      AppState.records = [];
+      AppState.activeId = null;
+      renderAll();
+      fitCanvasToViewport();
+      showToast('Cleared all GRNs.', 'info');
+    });
+
+    window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      DOM.dragOverlay.classList.remove('hidden');
+    });
+    DOM.dragOverlay.addEventListener('dragleave', (e) => {
+      if (e.target === DOM.dragOverlay) DOM.dragOverlay.classList.add('hidden');
+    });
+    window.addEventListener('drop', (e) => {
+      e.preventDefault();
+      DOM.dragOverlay.classList.add('hidden');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleFilesUpload(e.dataTransfer.files);
+      }
+    });
+
+    document.getElementById('btnRotateLeft').addEventListener('click', () => {
+      const rec = getActiveRecord();
+      if (!rec) return;
+      rec.rotation = (rec.rotation + 270) % 360;
+      fitCanvasToViewport();
+    });
+    document.getElementById('btnRotateRight').addEventListener('click', () => {
+      const rec = getActiveRecord();
+      if (!rec) return;
+      rec.rotation = (rec.rotation + 90) % 360;
+      fitCanvasToViewport();
+    });
+    document.getElementById('btnZoomIn').addEventListener('click', () => {
+      AppState.canvasTransform.scale = Math.min(4, AppState.canvasTransform.scale * 1.2);
+      renderCanvas();
+    });
+    document.getElementById('btnZoomOut').addEventListener('click', () => {
+      AppState.canvasTransform.scale = Math.max(0.2, AppState.canvasTransform.scale / 1.2);
+      renderCanvas();
+    });
+    document.getElementById('btnZoomReset').addEventListener('click', fitCanvasToViewport);
+
+    document.getElementById('btnReOcrCurrent').addEventListener('click', () => {
+      const rec = getActiveRecord();
+      if (rec) runOcrAndBarcodeOnRecord(rec, null, true);
+    });
+
+    document.getElementById('btnDecodeBarcodeNow').addEventListener('click', async () => {
+      const rec = getActiveRecord();
+      if (!rec || !rec.imageObj) return;
+      const lastManual = [...(rec.redBoxes || [])].reverse().find(b => b.manual);
+      await runOcrAndBarcodeOnRecord(rec, lastManual || null, false);
+    });
+
+    DOM.selPasswordSource.addEventListener('change', (e) => {
+      AppState.passwordSourceMode = e.target.value;
+      const rec = getActiveRecord();
+      if (rec) resolvePasswordForRecord(rec, false);
+    });
+
+    const btnToggleDrawMode = document.getElementById('btnToggleDrawMode');
+    btnToggleDrawMode.addEventListener('click', () => {
+      AppState.canvasTransform.drawMode = !AppState.canvasTransform.drawMode;
+      if (AppState.canvasTransform.drawMode) {
+        btnToggleDrawMode.style.background = '#dc2626';
+        btnToggleDrawMode.style.color = '#ffffff';
+        btnToggleDrawMode.style.borderColor = '#dc2626';
+        DOM.canvasViewport.classList.add('draw-active');
+        showToast('Draw Red Box ON: Drag over barcode or text to decode.', 'info');
+      } else {
+        btnToggleDrawMode.style.background = '#ffffff';
+        btnToggleDrawMode.style.color = '#334155';
+        btnToggleDrawMode.style.borderColor = '#cbd5e1';
+        DOM.canvasViewport.classList.remove('draw-active');
+        showToast('Draw Red Box OFF: Drag to pan GRN.', 'info');
+      }
+    });
+
+    document.getElementById('btnUndoBox').addEventListener('click', () => {
+      const rec = getActiveRecord();
+      if (!rec || !rec.redBoxes || rec.redBoxes.length === 0) return;
+      rec.redBoxes.pop();
+      renderCanvas();
+      showToast('Removed last red box.', 'info');
+    });
+
+    DOM.canvasViewport.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      const factor = e.deltaY < 0 ? 1.12 : 0.88;
+      AppState.canvasTransform.scale = Math.max(0.2, Math.min(4.5, AppState.canvasTransform.scale * factor));
+      renderCanvas();
+    }, { passive: false });
+
+    DOM.inputPoNumber.addEventListener('input', (e) => {
+      const rec = getActiveRecord();
+      if (!rec) return;
+      rec.poNumber = e.target.value.trim();
+      renderQueue();
+      renderMasterTable();
+    });
+
+    DOM.inputRequester.addEventListener('input', (e) => {
+      const rec = getActiveRecord();
+      if (!rec) return;
+      rec.requester = e.target.value.trim();
+      renderQueue();
+      renderMasterTable();
+    });
+
+    DOM.inputItemCodes.addEventListener('input', (e) => {
+      const rec = getActiveRecord();
+      if (!rec) return;
+      rec.itemCodes = e.target.value.split(/[,;\s]+/).map(s => s.trim().toUpperCase()).filter(Boolean);
+      updateInspectorPanel();
+      renderQueue();
+      renderMasterTable();
+    });
+
+    DOM.inputLockerPassword.addEventListener('input', (e) => {
+      const rec = getActiveRecord();
+      applyPasswordAndLastTwoDigits(rec, e.target.value, false);
+    });
+
+    DOM.inputLockerPassword.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const rec = getActiveRecord();
+        applyPasswordAndLastTwoDigits(rec, e.target.value, true);
+      }
+    });
+
+    document.getElementById('btnVerifyAndNext').addEventListener('click', () => {
+      const rec = getActiveRecord();
+      if (!rec) return;
+      if (DOM.inputLockerPassword.value.trim()) {
+        applyPasswordAndLastTwoDigits(rec, DOM.inputLockerPassword.value, true);
+      } else {
+        advanceToNextGrn();
+      }
+    });
+
+    DOM.tableSearchInput.addEventListener('input', renderMasterTable);
+    document.getElementById('btnExportCsv').addEventListener('click', exportBatchCsv);
+    document.getElementById('btnCopyTable').addEventListener('click', copyBatchSummary);
+
+    window.addEventListener('resize', fitCanvasToViewport);
+    window.onload = () => {
+      renderAll();
+      fitCanvasToViewport();
+    };
+  </script>
+</body>
+</html>

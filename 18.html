@@ -1,772 +1,941 @@
 <!DOCTYPE html>
 <html lang="zh-Hant">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-  <title>自助櫃條碼及收貨單</title>
-  <style>
-    :root {
-      --bg: #ffffff;
-      --surface: #f4f6f9;
-      --ink: #0f172a;
-      --sub: #334155;
-      --line: #94a3b8;
-      --blue: #0047ab;
-      --blue-dark: #002d72;
-      --green: #0f766e;
-      --green-dark: #094e49;
-      --amber: #b45309;
-      --red: #b91c1c;
-    }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<title>自助柜条码及收货单</title>
+<script src="https://unpkg.com/@zxing/library@latest"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root{
+    --ink:#0f172a; --sub:#334155; --cyan:#0284c7; --bg:#f8fafc;
+    --muted:#64748b; --ok:#059669; --bad:#dc2626;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:rgba(2,132,199,.2);}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang TC","Noto Sans TC","Microsoft JhengHei",sans-serif;
+    font-size:20px;line-height:1.45;font-weight:700;
+  }
+  .app{max-width:640px;margin:0 auto;padding:16px;padding-bottom:60px;}
 
-    * {
-      box-sizing: border-box;
-      -webkit-tap-highlight-color: rgba(0, 71, 171, 0.2);
-    }
+  .head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:12px;flex-wrap:wrap;}
+  .head h1{font-size:28px;margin:0;font-weight:900;}
+  .badge{
+    background:#dbeafe;color:#002d72;border:3px solid #0047ab;border-radius:14px;
+    padding:8px 16px;font-size:20px;font-weight:900;white-space:nowrap;
+  }
 
-    body {
-      margin: 0;
-      padding: 18px;
-      background: var(--bg);
-      color: var(--ink);
-      font-family: "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", sans-serif;
-      font-size: 28px;
-      line-height: 1.45;
-      font-weight: 700;
-    }
+  .status-banner{
+    padding:14px 18px;border-radius:14px;font-size:19px;font-weight:900;
+    margin-bottom:14px;background:#fef3c7;color:#78350f;border:3px solid #d97706;display:none;
+  }
+  .status-banner.show{display:block;}
 
-    .app {
-      max-width: 900px;
-      margin: 0 auto;
-    }
+  .card{border:3px solid #cbd5e1;border-radius:20px;padding:18px;margin-bottom:16px;background:#fff;}
+  .card-title{
+    font-size:22px;font-weight:900;color:var(--cyan);margin:0 0 12px;
+    display:flex;align-items:center;gap:10px;
+  }
+  .card-title .num{
+    background:var(--cyan);color:#fff;border-radius:50%;width:32px;height:32px;
+    display:inline-flex;align-items:center;justify-content:center;font-size:18px;flex:0 0 32px;
+  }
 
-    .top-bar {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 12px;
-      margin-bottom: 18px;
-      flex-wrap: wrap;
-    }
+  .row{display:flex;gap:10px;margin-top:12px;}
+  .row:first-of-type{margin-top:0;}
+  .row input{
+    flex:1;min-width:0;font-size:22px;font-weight:900;padding:16px;
+    border:3px solid var(--ink);border-radius:14px;background:#fff;
+  }
+  .row input:focus{outline:2px solid var(--cyan);}
 
-    .title {
-      font-size: 38px;
-      font-weight: 900;
-      margin: 0;
-    }
+  .btn{
+    border:3px solid transparent;border-radius:16px;padding:16px 18px;font-size:20px;font-weight:900;
+    cursor:pointer;color:#fff;display:inline-flex;align-items:center;justify-content:center;
+    gap:8px;min-height:60px;
+  }
+  .btn:active{transform:scale(.97);}
+  .btn:disabled{background:#e2e8f0!important;color:#94a3b8!important;border-color:#cbd5e1!important;cursor:not-allowed;}
+  .btn-blue{background:var(--cyan);border-color:#075985;}
+  .btn-green{background:var(--ok);border-color:#065f46;}
+  .btn-gray{background:#475569;border-color:#1e293b;}
+  .btn-red{background:var(--bad);border-color:#7f1d1d;}
+  .btn-full{width:100%;}
+  .btn-small{min-height:48px;padding:10px 14px;font-size:17px;}
 
-    .badge {
-      background: #dbeafe;
-      color: var(--blue-dark);
-      border: 3px solid var(--blue);
-      border-radius: 14px;
-      padding: 8px 18px;
-      font-size: 28px;
-      font-weight: 900;
-      white-space: nowrap;
-    }
+  .hint{font-size:16px;color:var(--muted);line-height:1.5;margin-top:8px;}
 
-    .steps {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      margin-bottom: 20px;
-    }
+  .photo-preview{margin-top:14px;text-align:center;display:none;}
+  .photo-preview.show{display:block;}
+  .photo-preview img{max-width:100%;max-height:320px;border:3px solid var(--ink);border-radius:14px;}
+  .photo-preview .remove-btn{margin-top:10px;}
 
-    .step-tab {
-      border: 3px solid var(--line);
-      background: var(--surface);
-      color: var(--sub);
-      border-radius: 16px;
-      padding: 16px 10px;
-      font-size: 28px;
-      font-weight: 900;
-      text-align: center;
-      cursor: pointer;
-    }
+  .record-item{border:3px solid #cbd5e1;border-radius:16px;padding:14px;margin-bottom:12px;background:#f8fafc;}
+  .record-main{font-size:20px;font-weight:900;margin-bottom:4px;word-break:break-all;}
+  .record-sub{font-size:16px;color:var(--sub);margin-bottom:10px;font-weight:700;}
+  .record-thumb{
+    max-width:100%;max-height:180px;border-radius:10px;border:2px solid #cbd5e1;
+    margin-bottom:10px;cursor:pointer;display:block;
+  }
+  .record-actions{display:flex;gap:8px;flex-wrap:wrap;}
 
-    .step-tab.active {
-      background: var(--blue);
-      color: #ffffff;
-      border-color: var(--blue-dark);
-    }
+  .hidden{display:none!important;}
 
-    .step-tab.done {
-      background: #ccfbf1;
-      color: var(--green-dark);
-      border-color: var(--green);
-    }
+  .overlay{
+    position:fixed;inset:0;background:rgba(0,0,0,.85);z-index:20;
+    padding:20px;display:flex;align-items:center;justify-content:center;
+  }
+  .scanbox{width:min(100%,520px);background:#fff;border-radius:24px;padding:20px;}
+  .video-wrapper{
+    position:relative;width:100%;height:320px;border-radius:16px;overflow:hidden;background:#000;
+  }
+  .video-wrapper video{width:100%;height:100%;object-fit:cover;display:block;}
+  .scan-reticle{
+    position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+    width:72%;height:90px;border:3px solid #38bdf8;border-radius:12px;
+    box-shadow:0 0 0 9999px rgba(0,0,0,.52);pointer-events:none;z-index:2;
+  }
+  .scan-laser{
+    position:absolute;top:50%;left:6%;right:6%;height:2px;
+    background:#ef4444;box-shadow:0 0 8px #ef4444;animation:laserScan 1.6s infinite ease-in-out;
+  }
+  @keyframes laserScan{
+    0%,100%{transform:translateY(-28px);}
+    50%{transform:translateY(28px);}
+  }
+  .engine-badge{
+    display:inline-block;font-size:14px;font-weight:800;padding:4px 10px;
+    border-radius:6px;background:#e0f2fe;color:#0369a1;margin-bottom:8px;
+  }
+  .scanbox h3{font-size:22px;margin:4px 0 12px;text-align:center;}
+  .scanbox .hint{text-align:center;margin-top:10px;color:#0f172a;font-weight:bold;}
 
-    .card {
-      border: 3px solid var(--line);
-      border-radius: 20px;
-      padding: 20px;
-      margin-bottom: 20px;
-      background: #ffffff;
-    }
+  .success{
+    position:fixed;left:20px;right:20px;bottom:24px;max-width:500px;margin:auto;
+    background:var(--ok);color:#fff;padding:18px;border-radius:18px;
+    font-weight:900;font-size:20px;z-index:30;text-align:center;
+    box-shadow:0 10px 15px rgba(0,0,0,.2);
+  }
 
-    .label {
-      display: block;
-      font-size: 32px;
-      font-weight: 900;
-      margin-bottom: 10px;
-      color: var(--ink);
-    }
+  .image-modal-img{max-width:95%;max-height:85vh;border-radius:16px;}
+  .image-modal-tip{color:#fff;margin-top:14px;font-size:18px;font-weight:bold;text-align:center;}
 
-    input[type="text"] {
-      width: 100%;
-      font-size: 36px;
-      font-weight: 900;
-      padding: 16px 18px;
-      border: 3px solid var(--ink);
-      border-radius: 14px;
-      background: #ffffff;
-      color: var(--ink);
-      letter-spacing: 1px;
-    }
-
-    .btn-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 14px;
-      margin-top: 14px;
-    }
-
-    .btn-row.single {
-      grid-template-columns: 1fr;
-    }
-
-    button {
-      border: 3px solid transparent;
-      border-radius: 16px;
-      padding: 18px 16px;
-      font-size: 32px;
-      font-weight: 900;
-      cursor: pointer;
-      color: #ffffff;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      min-height: 76px;
-    }
-
-    button:active {
-      transform: scale(0.98);
-    }
-
-    .btn-blue {
-      background: var(--blue);
-      border-color: var(--blue-dark);
-    }
-
-    .btn-green {
-      background: var(--green);
-      border-color: var(--green-dark);
-    }
-
-    .btn-gray {
-      background: #334155;
-      border-color: #0f172a;
-    }
-
-    .btn-amber {
-      background: var(--amber);
-      border-color: #78350f;
-    }
-
-    .btn-red {
-      background: var(--red);
-      border-color: #7f1d1d;
-    }
-
-    .btn-small {
-      min-height: 62px;
-      padding: 12px 16px;
-      font-size: 28px;
-    }
-
-    .scanner-box {
-      margin-top: 14px;
-      border: 3px solid var(--ink);
-      border-radius: 16px;
-      overflow: hidden;
-      background: #000000;
-      display: none;
-    }
-
-    .scanner-box.open {
-      display: block;
-    }
-
-    video {
-      width: 100%;
-      max-height: 360px;
-      display: block;
-      object-fit: cover;
-    }
-
-    .png-box {
-      margin-top: 18px;
-      border: 3px solid var(--ink);
-      border-radius: 16px;
-      padding: 14px;
-      background: #f8fafc;
-      text-align: center;
-    }
-
-    .png-box img {
-      max-width: 100%;
-      height: auto;
-      border: 2px solid #cbd5e1;
-      border-radius: 10px;
-      background: #ffffff;
-    }
-
-    .photo-preview {
-      margin-top: 16px;
-      text-align: center;
-    }
-
-    .photo-preview img {
-      max-width: 100%;
-      max-height: 360px;
-      border: 3px solid var(--ink);
-      border-radius: 14px;
-      display: none;
-      margin: 0 auto;
-    }
-
-    .photo-preview img.show {
-      display: block;
-    }
-
-    .status-banner {
-      padding: 14px 18px;
-      border-radius: 14px;
-      font-size: 30px;
-      font-weight: 900;
-      margin-bottom: 16px;
-      background: #fef3c7;
-      color: #78350f;
-      border: 3px solid #d97706;
-      display: none;
-    }
-
-    .status-banner.show {
-      display: block;
-    }
-
-    .record-item {
-      border: 3px solid var(--ink);
-      border-radius: 16px;
-      padding: 16px;
-      margin-bottom: 14px;
-      background: #f8fafc;
-    }
-
-    .record-main {
-      font-size: 32px;
-      font-weight: 900;
-      margin-bottom: 8px;
-      word-break: break-all;
-    }
-
-    .record-sub {
-      font-size: 28px;
-      font-weight: 700;
-      color: var(--sub);
-      margin-bottom: 12px;
-    }
-
-    .record-actions {
-      display: flex;
-      gap: 10px;
-      flex-wrap: wrap;
-    }
-
-    .hidden {
-      display: none !important;
-    }
-
-    @media (max-width: 640px) {
-      body {
-        font-size: 26px;
-        padding: 12px;
-      }
-      .title {
-        font-size: 32px;
-      }
-      .step-tab {
-        font-size: 26px;
-        padding: 14px 6px;
-      }
-      button {
-        font-size: 28px;
-        min-height: 70px;
-      }
-      .btn-row {
-        grid-template-columns: 1fr;
-      }
-    }
-  </style>
+  @media (max-width:480px){
+    .head h1{font-size:24px;}
+    .card-title{font-size:20px;}
+    .row{flex-direction:column;}
+  }
+</style>
 </head>
 <body>
-  <div class="app">
-    <div class="top-bar">
-      <h1 class="title">自助櫃及收貨單</h1>
-      <div class="badge" id="savedCountBadge">已存：0 單</div>
-    </div>
 
-    <div id="statusBanner" class="status-banner"></div>
-
-    <div class="steps">
-      <button type="button" class="step-tab active" id="tab1" onclick="goStep(1)">1. 掃條碼</button>
-      <button type="button" class="step-tab" id="tab2" onclick="goStep(2)">2. 影收貨單</button>
-      <button type="button" class="step-tab" id="tab3" onclick="goStep(3)">3. 匯出紀錄</button>
-    </div>
-
-    <!-- 第一步：掃條碼及轉 PNG 分享 -->
-    <section id="step1" class="card">
-      <label class="label" for="barcodeInput">條碼號碼</label>
-      <input type="text" id="barcodeInput" placeholder="掃描或輸入號碼" oninput="onBarcodeInput()" />
-
-      <div class="btn-row">
-        <button type="button" class="btn-blue" id="scanBtn" onclick="toggleScanner()">開相機掃碼</button>
-        <button type="button" class="btn-green" onclick="makePng()">轉 PNG 圖</button>
-      </div>
-
-      <div class="scanner-box" id="scannerBox">
-        <video id="video" playsinline muted></video>
-      </div>
-
-      <div class="png-box">
-        <div class="label" style="margin-bottom:8px;">給部門掃碼 PNG</div>
-        <img id="pngImg" alt="條碼 PNG" />
-        <!-- canvas 放喺畫面外，避免部分瀏覽器 display:none 時量唔到尺寸 -->
-        <canvas id="barcodeCanvas" style="position:absolute;left:-99999px;top:-99999px;"></canvas>
-        <div class="btn-row" style="margin-top:14px;">
-          <button type="button" class="btn-blue" onclick="shareOrDownloadPng()">分享／下載 PNG</button>
-          <button type="button" class="btn-green" onclick="goStep(2)">下一步：影收貨單</button>
-        </div>
-      </div>
-    </section>
-
-    <!-- 第二步：影收貨單相片及儲存 -->
-    <section id="step2" class="card hidden">
-      <div class="label" id="activeCodeLabel">目前條碼：未填</div>
-
-      <label class="label" for="grnNoInput">收貨單號（可不填）</label>
-      <input type="text" id="grnNoInput" placeholder="輸入單號" />
-
-      <div class="btn-row single" style="margin-top:16px;">
-        <label for="grnFileInput" class="btn-blue" style="border-radius:16px;padding:20px;font-size:32px;font-weight:900;color:#fff;text-align:center;cursor:pointer;display:block;">
-          影收貨單相片
-        </label>
-        <input type="file" id="grnFileInput" accept="image/*" capture="environment" style="display:none;" onchange="onPhotoSelected(event)" />
-      </div>
-
-      <div class="photo-preview">
-        <img id="grnPreviewImg" alt="收貨單相片" />
-      </div>
-
-      <div class="btn-row" style="margin-top:18px;">
-        <button type="button" class="btn-gray" onclick="goStep(1)">上一步</button>
-        <button type="button" class="btn-green" onclick="saveRecord()">儲存此單</button>
-      </div>
-    </section>
-
-    <!-- 第三步：匯出所有完成紀錄 -->
-    <section id="step3" class="card hidden">
-      <div class="label">已完成紀錄</div>
-
-      <div class="btn-row">
-        <button type="button" class="btn-green" onclick="exportCsv()">匯出 CSV 檔</button>
-        <button type="button" class="btn-blue" onclick="exportAllPhotos()">下載全部相片</button>
-      </div>
-
-      <div class="btn-row single" style="margin-top:12px;">
-        <button type="button" class="btn-red" onclick="clearAllRecords()">清空全部紀錄</button>
-      </div>
-
-      <div id="recordsList" style="margin-top:20px;"></div>
-    </section>
+<div class="app">
+  <div class="head">
+    <h1>自助柜条码及收货单</h1>
+    <div class="badge" id="savedCountBadge">已存：0 单</div>
   </div>
 
-  <!-- 真條碼產生器（Code128），CDN 加載；失敗時下面會有 fallback -->
-  <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+  <div id="statusBanner" class="status-banner"></div>
 
-  <!-- 全局錯誤提示：放喺主 script 之前，咁即使主 script 語法錯都見到 -->
-  <script>
-    window.addEventListener("error", function (e) {
-      var el = document.getElementById("statusBanner");
-      if (el) {
-        el.textContent = "程式錯誤：" + (e.message || "未知錯誤");
-        el.classList.add("show");
+  <!-- 1. 扫条码 -->
+  <section class="card">
+    <h2 class="card-title"><span class="num">1</span>扫条码</h2>
+    <div class="row">
+      <input type="text" id="barcodeInput" placeholder="扫码或手动输入条码" autocomplete="off">
+      <button class="btn btn-blue" onclick="openScanner('barcode')">📷 扫码</button>
+    </div>
+  </section>
+
+  <!-- 2. 拍照 + PO -->
+  <section class="card">
+    <h2 class="card-title"><span class="num">2</span>拍收货单 / PO 单号</h2>
+    <div class="row">
+      <input type="text" id="poInput" placeholder="输入收货单号 / PO（可不填）" autocomplete="off">
+    </div>
+    <div class="row">
+      <button class="btn btn-blue btn-full" onclick="openProofCamera()">📸 拍收货单照片</button>
+    </div>
+    <div id="photoPreview" class="photo-preview">
+      <img id="photoPreviewImg" alt="收货单照片">
+      <div class="remove-btn">
+        <button class="btn btn-gray btn-small" onclick="removePhoto()">✕ 重拍 / 移除</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. 保存 -->
+  <section class="card">
+    <button class="btn btn-green btn-full" onclick="saveRecord()" style="font-size:24px;min-height:68px;">✅ 保存此单</button>
+  </section>
+
+  <!-- 4. 记录 + 汇出 -->
+  <section class="card">
+    <h2 class="card-title"><span class="num">3</span>已完成记录</h2>
+    <div id="storageInfo" class="hint" style="margin-bottom:10px;"></div>
+    <div class="row">
+      <button class="btn btn-green btn-full" onclick="exportCsv()">📄 汇出 CSV</button>
+    </div>
+    <div class="row">
+      <button class="btn btn-blue btn-full" onclick="exportZip()">📦 汇出 ZIP（含照片）</button>
+    </div>
+    <div class="row">
+      <button class="btn btn-red btn-full" onclick="clearAllRecords()">🗑️ 清空全部记录</button>
+    </div>
+    <div id="recordsList" style="margin-top:16px;"></div>
+  </section>
+</div>
+
+<!-- 扫描 overlay -->
+<div id="scanner" class="overlay hidden">
+  <div class="scanbox" style="text-align:center;">
+    <span id="engineBadge" class="engine-badge">⚡ 侦测引擎初始化...</span>
+    <h3 id="scanTitle">对准条码进行扫描</h3>
+    <div class="video-wrapper">
+      <video id="video" autoplay muted playsinline></video>
+      <div class="scan-reticle">
+        <div class="scan-laser"></div>
+      </div>
+    </div>
+    <p class="hint">请将【单一目标条码】放入蓝色框内</p>
+    <button class="btn btn-gray btn-full" style="margin-top:12px;" onclick="closeScanner()">关闭相机</button>
+  </div>
+</div>
+
+<!-- 拍照 overlay -->
+<div id="proofCamera" class="overlay hidden">
+  <div class="scanbox">
+    <h3>即时拍摄收货单</h3>
+    <video id="proofVideo" autoplay muted playsinline
+           style="width:100%;height:300px;object-fit:cover;border-radius:16px;background:#000;"></video>
+    <canvas id="proofCanvas" class="hidden"></canvas>
+    <div class="row" style="margin-top:16px;">
+      <button class="btn btn-gray" style="flex:1;" onclick="closeProofCamera()">取消</button>
+      <button class="btn btn-green" style="flex:2;" onclick="takeProofPhoto()">📸 拍照</button>
+    </div>
+  </div>
+</div>
+
+<!-- 图片放大 -->
+<div id="imageModal" class="overlay hidden" onclick="closeImageModal()">
+  <div style="text-align:center;">
+    <img id="modalImg" class="image-modal-img" src="" alt="">
+    <p class="image-modal-tip">点击任意处关闭</p>
+  </div>
+</div>
+
+<div id="success" class="success hidden">🎉 已保存！</div>
+
+<script>
+/* ==========================================================
+   存储层：IndexedDB + Blob
+   ========================================================== */
+const DB_NAME = 'self_cabinet_grn_db';
+const DB_VERSION = 1;
+const STORE = 'records';
+const LEGACY_KEY = 'self_cabinet_grn_v2'; // 旧版 localStorage key，用于一次性迁移
+
+let db = null;
+let records = [];              // 内存缓存，倒序（最新在前）
+let thumbURLs = new Map();     // id -> objectURL，避免重复创建
+
+let currentPhotoBlob = null;   // 当前待保存照片
+let currentPhotoURL = null;    // 当前预览 objectURL
+let modalURL = null;           // 图片放大 objectURL
+
+/* ---------- 打开数据库 ---------- */
+function openDB() {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if (!d.objectStoreNames.contains(STORE)) {
+        d.createObjectStore(STORE, { keyPath: 'id' });
       }
-    });
-  </script>
+    };
+    req.onsuccess = () => resolve(req.result);
+    req.onerror = () => reject(req.error);
+  });
+}
 
-  <script>
-    const STORAGE_KEY = "runner_cabinet_grn_v1";
-    let records = [];
-    let currentPhotoData = "";
-    let scanning = false;
-    let stream = null;
-    let scanTimer = null;
+function dbGetAll() {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('DB 未就绪'));
+    const tx = db.transaction(STORE, 'readonly');
+    const req = tx.objectStore(STORE).getAll();
+    req.onsuccess = () => resolve(req.result || []);
+    req.onerror = () => reject(req.error);
+  });
+}
 
-    function init() {
-      try {
-        const raw = localStorage.getItem(STORAGE_KEY);
-        if (raw) records = JSON.parse(raw);
-      } catch (e) {
-        records = [];
-      }
-      renderBadge();
-      renderRecords();
-      makePng();
+function dbPut(rec) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('DB 未就绪'));
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).put(rec);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function dbDelete(id) {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('DB 未就绪'));
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+function dbClear() {
+  return new Promise((resolve, reject) => {
+    if (!db) return reject(new Error('DB 未就绪'));
+    const tx = db.transaction(STORE, 'readwrite');
+    tx.objectStore(STORE).clear();
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+}
+
+/* ---------- 旧 localStorage 数据迁移（一次性） ---------- */
+function dataURLtoBlob(dataurl) {
+  try {
+    const arr = dataurl.split(',');
+    const mime = arr[0].match(/:(.*?);/)[1];
+    const bstr = atob(arr[1]);
+    let n = bstr.length;
+    const u8 = new Uint8Array(n);
+    while (n--) u8[n] = bstr.charCodeAt(n);
+    return new Blob([u8], { type: mime });
+  } catch (e) { return null; }
+}
+
+async function migrateLegacy() {
+  try {
+    const raw = localStorage.getItem(LEGACY_KEY);
+    if (!raw) return;
+    const old = JSON.parse(raw);
+    if (!Array.isArray(old) || !old.length) {
+      localStorage.removeItem(LEGACY_KEY);
+      return;
     }
-
-    function showMsg(text) {
-      const el = document.getElementById("statusBanner");
-      el.textContent = text;
-      el.classList.add("show");
-      clearTimeout(window._msgTimer);
-      window._msgTimer = setTimeout(() => el.classList.remove("show"), 3000);
-    }
-
-    function goStep(step) {
-      stopScanner();
-      [1, 2, 3].forEach((n) => {
-        document.getElementById("step" + n).classList.toggle("hidden", n !== step);
-        const tab = document.getElementById("tab" + n);
-        tab.classList.toggle("active", n === step);
-      });
-      if (step === 2) {
-        const code = document.getElementById("barcodeInput").value.trim() || "未填";
-        document.getElementById("activeCodeLabel").textContent = "目前條碼：" + code;
-      }
-      if (step === 3) {
-        renderRecords();
-      }
-    }
-
-    function onBarcodeInput() {
-      makePng();
-    }
-
-    // 用 JsBarcode 產生真．Code128，任何掃碼器都讀得到
-    function makePng() {
-      const code = (document.getElementById("barcodeInput").value || "174400108").trim();
-      const canvas = document.getElementById("barcodeCanvas");
-
-      // CDN 未加載時的 fallback：純文字大字，至少唔會空白一片
-      if (typeof JsBarcode === "undefined") {
-        const ctx = canvas.getContext("2d");
-        canvas.width = 760;
-        canvas.height = 300;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        ctx.fillStyle = "#b91c1c";
-        ctx.font = "bold 30px sans-serif";
-        ctx.textAlign = "center";
-        ctx.fillText("條碼庫未載入，僅顯示文字", canvas.width / 2, 60);
-        ctx.fillStyle = "#000000";
-        ctx.font = "bold 80px monospace";
-        ctx.fillText(code, canvas.width / 2, 190);
-        const dataUrl = canvas.toDataURL("image/png");
-        document.getElementById("pngImg").src = dataUrl;
-        return dataUrl;
-      }
-
-      try {
-        JsBarcode(canvas, code, {
-          format: "CODE128",
-          width: 3,
-          height: 150,
-          displayValue: true,
-          fontSize: 42,
-          font: "monospace",
-          textMargin: 8,
-          margin: 20,
-          background: "#ffffff",
-          lineColor: "#000000"
-        });
-      } catch (err) {
-        // Code128 只支援 ASCII；中文／特殊字元會拋錯
-        showMsg("條碼格式不支援（請用英數）");
-      }
-
-      const dataUrl = canvas.toDataURL("image/png");
-      document.getElementById("pngImg").src = dataUrl;
-      return dataUrl;
-    }
-
-    async function shareOrDownloadPng() {
-      const code = (document.getElementById("barcodeInput").value || "barcode").trim();
-      const dataUrl = makePng();
-      const res = await fetch(dataUrl);
-      const blob = await res.blob();
-      const file = new File([blob], code + ".png", { type: "image/png" });
-
-      if (navigator.canShare && navigator.canShare({ files: [file] })) {
-        try {
-          await navigator.share({
-            files: [file],
-            title: "條碼 " + code
-          });
-          showMsg("已開啟分享");
-          return;
-        } catch (err) {
-          if (err.name === "AbortError") return;
-        }
-      }
-
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = code + ".png";
-      a.click();
-      showMsg("已下載 PNG");
-    }
-
-    async function toggleScanner() {
-      if (scanning) {
-        stopScanner();
-        return;
-      }
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        showMsg("此機不支援相機，請直接輸入");
-        return;
-      }
-      try {
-        stream = await navigator.mediaDevices.getUserMedia({
-          video: { facingMode: "environment" }
-        });
-        const video = document.getElementById("video");
-        video.srcObject = stream;
-        await video.play();
-        document.getElementById("scannerBox").classList.add("open");
-        document.getElementById("scanBtn").textContent = "停止掃碼";
-        scanning = true;
-
-        const hasDetector = ("BarcodeDetector" in window);
-        const detector = hasDetector ? new window.BarcodeDetector() : null;
-
-        scanTimer = setInterval(async () => {
-          if (!scanning || video.readyState < 2) return;
-          if (detector) {
-            try {
-              const codes = await detector.detect(video);
-              if (codes && codes.length > 0 && codes[0].rawValue) {
-                document.getElementById("barcodeInput").value = codes[0].rawValue.trim();
-                makePng();
-                stopScanner();
-                showMsg("已掃到：" + codes[0].rawValue.trim());
-              }
-            } catch (e) {}
-          }
-        }, 350);
-
-        if (!hasDetector) {
-          showMsg("請對準條碼，或直接輸入號碼");
-        }
-      } catch (err) {
-        showMsg("開唔到相機，請直接輸入");
-      }
-    }
-
-    function stopScanner() {
-      scanning = false;
-      clearInterval(scanTimer);
-      if (stream) {
-        stream.getTracks().forEach((t) => t.stop());
-        stream = null;
-      }
-      document.getElementById("scannerBox").classList.remove("open");
-      document.getElementById("scanBtn").textContent = "開相機掃碼";
-    }
-
-    function onPhotoSelected(event) {
-      const file = event.target.files && event.target.files[0];
-      if (!file) return;
-
-      const reader = new FileReader();
-      reader.onload = function (e) {
-        const img = new Image();
-        img.onload = function () {
-          const maxW = 1280;
-          const scale = img.width > maxW ? maxW / img.width : 1;
-          const c = document.createElement("canvas");
-          c.width = Math.round(img.width * scale);
-          c.height = Math.round(img.height * scale);
-          const ctx = c.getContext("2d");
-          ctx.drawImage(img, 0, 0, c.width, c.height);
-          currentPhotoData = c.toDataURL("image/jpeg", 0.82);
-
-          const preview = document.getElementById("grnPreviewImg");
-          preview.src = currentPhotoData;
-          preview.classList.add("show");
-          showMsg("已影好相片");
-        };
-        img.src = e.target.result;
+    for (const r of old) {
+      const blob = r.photo ? dataURLtoBlob(r.photo) : null;
+      const rec = {
+        id: r.id || ('R' + Date.now() + Math.random().toString(36).slice(2, 6)),
+        barcode: r.barcode || '',
+        poNo: r.poNo || '',
+        time: r.time || '',
+        createdAt: Number(String(r.id || '').replace('R', '')) || Date.now(),
+        photoBlob: blob
       };
-      reader.readAsDataURL(file);
+      await dbPut(rec);
     }
+    localStorage.removeItem(LEGACY_KEY);
+    console.log('已迁移旧记录', old.length);
+  } catch (e) {
+    console.warn('迁移失败', e);
+  }
+}
 
-    function saveRecord() {
-      const code = document.getElementById("barcodeInput").value.trim();
-      const grnNo = document.getElementById("grnNoInput").value.trim();
+/* ==========================================================
+   扫描器（24.html 双引擎方案）
+   ========================================================== */
+let scanTarget = null;
+let codeReader = null;
+let isProcessingScan = false;
+let nativeScanLoopId = null;
+let activeScanStream = null;
+let proofStream = null;
 
-      if (!code) {
-        showMsg("請先填條碼號碼");
-        goStep(1);
-        return;
-      }
-      if (!currentPhotoData) {
-        showMsg("請先影收貨單相片");
-        return;
-      }
+const REQUIRED_BARCODE_FORMATS = ['code_128','code_39','ean_13','qr_code','codabar','itf'];
+const MAX_NATIVE_DETECT_ERRORS = 3;
 
-      const now = new Date();
-      const timeStr = now.toLocaleString("zh-HK", { hour12: false });
+function checkCameraEnvironment() {
+  if (!window.isSecureContext) {
+    showMsg('此功能必须 HTTPS 连线', 'bad'); return false;
+  }
+  if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+    showMsg('此浏览器不支援相机，请用 Chrome / Safari', 'bad'); return false;
+  }
+  return true;
+}
 
-      records.unshift({
-        id: "R" + Date.now(),
-        barcode: code,
-        grnNo: grnNo,
-        time: timeStr,
-        photo: currentPhotoData
-      });
+async function acquireCameraStreamWithFallback(options = {}) {
+  const w1 = options.preferredWidth || 1280;
+  const h1 = options.preferredHeight || 720;
+  const w2 = options.fallbackWidth || 640;
+  const h2 = options.fallbackHeight || 480;
+  const candidates = [
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: w1 }, height: { ideal: h1 } }, audio: false },
+    { video: { facingMode: { ideal: 'environment' }, width: { ideal: w2 }, height: { ideal: h2 } }, audio: false },
+    { video: { facingMode: 'environment' }, audio: false },
+    { video: true, audio: false }
+  ];
+  let lastError = null;
+  for (const c of candidates) {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(c);
+      if (stream) return stream;
+    } catch (err) { lastError = err; }
+  }
+  throw lastError || new Error('所有相机模式皆无法启动');
+}
 
+function setScannerBadge(mode) {
+  const badge = document.getElementById('engineBadge');
+  if (!badge) return;
+  if (mode === 'native') {
+    badge.textContent = '⚡ 高速扫描模式';
+    badge.style.background = '#dcfce7'; badge.style.color = '#166534';
+  } else {
+    badge.textContent = '🔄 相容扫描模式';
+    badge.style.background = '#e0f2fe'; badge.style.color = '#0369a1';
+  }
+}
+
+async function getSupportedNativeFormats() {
+  if (typeof window.BarcodeDetector === 'undefined') return [];
+  if (typeof window.BarcodeDetector.getSupportedFormats !== 'function') {
+    return REQUIRED_BARCODE_FORMATS;
+  }
+  try {
+    const supported = await window.BarcodeDetector.getSupportedFormats();
+    if (!Array.isArray(supported) || supported.length === 0) return [];
+    const set = new Set(supported.map(f => String(f).toLowerCase()));
+    return REQUIRED_BARCODE_FORMATS.filter(f => set.has(f.toLowerCase()));
+  } catch (e) { return []; }
+}
+
+function startZxingOnExistingVideo(videoEl) {
+  if (isProcessingScan) return;
+  setScannerBadge('zxing');
+  if (nativeScanLoopId) { clearTimeout(nativeScanLoopId); nativeScanLoopId = null; }
+  try {
+    if (!codeReader) codeReader = new ZXing.BrowserMultiFormatReader();
+    else if (typeof codeReader.reset === 'function') codeReader.reset();
+
+    codeReader.decodeFromVideoElementContinuously(videoEl, (result, err) => {
+      if (isProcessingScan) return;
+      if (result && result.text) handleScanSuccess(result.text);
+    });
+  } catch (e) { console.warn('ZXing 启动失败', e); }
+}
+
+async function openScanner(target) {
+  if (!checkCameraEnvironment()) return;
+  stopActiveCamera({ hideOverlay: false });
+
+  scanTarget = target;
+  document.getElementById('scanner').classList.remove('hidden');
+  isProcessingScan = false;
+
+  const video = document.getElementById('video');
+  try {
+    const stream = await acquireCameraStreamWithFallback({ preferredWidth: 1280, preferredHeight: 720 });
+    activeScanStream = stream;
+    video.srcObject = stream;
+    await video.play();
+  } catch (e) {
+    console.error('相机开启失败', e);
+    showMsg('无法启动相机，请检查权限', 'bad');
+    stopActiveCamera({ hideOverlay: true });
+    return;
+  }
+
+  const usableFormats = await getSupportedNativeFormats();
+  if (usableFormats.length > 0) {
+    try {
+      const detector = new window.BarcodeDetector({ formats: usableFormats });
+      setScannerBadge('native');
+
+      const cropCanvas = document.createElement('canvas');
+      const cropCtx = cropCanvas.getContext('2d', { willReadFrequently: true });
+      let consecutiveErrors = 0;
+
+      const scanLoop = async () => {
+        if (isProcessingScan || !activeScanStream) return;
+        if (video.readyState >= video.HAVE_CURRENT_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+          const sw = Math.floor(video.videoWidth * 0.75);
+          const sh = Math.floor(video.videoHeight * 0.35);
+          const sx = Math.floor((video.videoWidth - sw) / 2);
+          const sy = Math.floor((video.videoHeight - sh) / 2);
+          cropCanvas.width = sw; cropCanvas.height = sh;
+          cropCtx.drawImage(video, sx, sy, sw, sh, 0, 0, sw, sh);
+          try {
+            const barcodes = await detector.detect(cropCanvas);
+            consecutiveErrors = 0;
+            if (barcodes && barcodes.length > 0 && barcodes[0].rawValue) {
+              handleScanSuccess(barcodes[0].rawValue);
+              return;
+            }
+          } catch (detectErr) {
+            consecutiveErrors++;
+            if (consecutiveErrors >= MAX_NATIVE_DETECT_ERRORS) {
+              startZxingOnExistingVideo(video);
+              return;
+            }
+          }
+        }
+        nativeScanLoopId = setTimeout(scanLoop, 80);
+      };
+      scanLoop();
+      return;
+    } catch (initErr) {
+      console.warn('BarcodeDetector 初始化失败', initErr);
+    }
+  }
+  startZxingOnExistingVideo(video);
+}
+
+function handleScanSuccess(text) {
+  if (isProcessingScan) return;
+  isProcessingScan = true;
+  playBeep();
+  if (navigator.vibrate) navigator.vibrate(100);
+
+  if (scanTarget === 'barcode') {
+    document.getElementById('barcodeInput').value = text;
+    showMsg('已扫到：' + text, 'ok');
+  }
+  stopActiveCamera({ hideOverlay: true });
+}
+
+function stopActiveCamera(options = { hideOverlay: true }) {
+  isProcessingScan = true;
+  if (nativeScanLoopId) { clearTimeout(nativeScanLoopId); nativeScanLoopId = null; }
+  if (codeReader) {
+    try { codeReader.reset(); } catch (e) {}
+    codeReader = null;
+  }
+  if (activeScanStream) {
+    try { activeScanStream.getTracks().forEach(t => t.stop()); } catch (e) {}
+    activeScanStream = null;
+  }
+  const video = document.getElementById('video');
+  if (video) {
+    try { video.pause(); } catch (e) {}
+    if (video.srcObject) {
+      try { video.srcObject.getTracks().forEach(t => t.stop()); } catch (e) {}
+      video.srcObject = null;
+    }
+  }
+  if (options && options.hideOverlay) {
+    document.getElementById('scanner').classList.add('hidden');
+  }
+}
+
+function closeScanner() { stopActiveCamera({ hideOverlay: true }); }
+
+/* ==========================================================
+   拍照（canvas -> Blob）
+   ========================================================== */
+function canvasToBlob(canvas, quality) {
+  return new Promise((resolve, reject) => {
+    if (canvas.toBlob) {
+      canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob 失败')), 'image/jpeg', quality);
+    } else {
+      // 极旧浏览器 fallback
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-      } catch (e) {
-        showMsg("儲存空間滿！請先去第 3 步匯出／下載相片，再清空舊紀錄");
-        return;
-      }
-
-      currentPhotoData = "";
-      document.getElementById("barcodeInput").value = "";
-      document.getElementById("grnNoInput").value = "";
-      document.getElementById("grnFileInput").value = "";
-      const preview = document.getElementById("grnPreviewImg");
-      preview.src = "";
-      preview.classList.remove("show");
-      makePng();
-
-      renderBadge();
-      renderRecords();
-      showMsg("已儲存：" + code);
-      goStep(3);
+        const dataURL = canvas.toDataURL('image/jpeg', quality);
+        resolve(dataURLtoBlob(dataURL));
+      } catch (e) { reject(e); }
     }
+  });
+}
 
-    function renderBadge() {
-      document.getElementById("savedCountBadge").textContent = "已存：" + records.length + " 單";
+async function openProofCamera() {
+  if (!checkCameraEnvironment()) return;
+  document.getElementById('proofCamera').classList.remove('hidden');
+  try {
+    proofStream = await acquireCameraStreamWithFallback({ preferredWidth: 1600, preferredHeight: 1200 });
+    const video = document.getElementById('proofVideo');
+    video.srcObject = proofStream;
+    await video.play();
+  } catch (e) {
+    alert('无法开启相机，请检查浏览器相机权限');
+    closeProofCamera();
+  }
+}
+
+async function takeProofPhoto() {
+  const video = document.getElementById('proofVideo');
+  const canvas = document.getElementById('proofCanvas');
+  if (!video.videoWidth) return;
+
+  // 限制最长边 1600px 并压缩，Blob 直接入 IndexedDB
+  const maxW = 1600;
+  const scale = video.videoWidth > maxW ? maxW / video.videoWidth : 1;
+  canvas.width = Math.round(video.videoWidth * scale);
+  canvas.height = Math.round(video.videoHeight * scale);
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+  try {
+    const blob = await canvasToBlob(canvas, 0.72);
+    if (currentPhotoURL) { URL.revokeObjectURL(currentPhotoURL); currentPhotoURL = null; }
+    currentPhotoBlob = blob;
+    currentPhotoURL = URL.createObjectURL(blob);
+    closeProofCamera();
+    renderPhotoPreview();
+    showMsg('已拍好收货单', 'ok');
+  } catch (e) {
+    showMsg('照片生成失败：' + e.message, 'bad');
+  }
+}
+
+function closeProofCamera() {
+  const video = document.getElementById('proofVideo');
+  if (video && video.srcObject) {
+    try { video.srcObject.getTracks().forEach(t => t.stop()); } catch (e) {}
+    video.pause();
+    video.srcObject = null;
+  }
+  proofStream = null;
+  document.getElementById('proofCamera').classList.add('hidden');
+}
+
+function removePhoto() {
+  if (currentPhotoURL) { URL.revokeObjectURL(currentPhotoURL); currentPhotoURL = null; }
+  currentPhotoBlob = null;
+  renderPhotoPreview();
+}
+
+function clearCurrentPhoto() {
+  if (currentPhotoURL) { URL.revokeObjectURL(currentPhotoURL); currentPhotoURL = null; }
+  currentPhotoBlob = null;
+  renderPhotoPreview();
+}
+
+function renderPhotoPreview() {
+  const box = document.getElementById('photoPreview');
+  const img = document.getElementById('photoPreviewImg');
+  if (currentPhotoURL) {
+    img.src = currentPhotoURL;
+    box.classList.add('show');
+  } else {
+    img.removeAttribute('src');
+    box.classList.remove('show');
+  }
+}
+
+/* ==========================================================
+   保存
+   ========================================================== */
+async function saveRecord() {
+  const barcode = document.getElementById('barcodeInput').value.trim();
+  const poNo = document.getElementById('poInput').value.trim();
+
+  if (!barcode) { showMsg('请先扫条码', 'bad'); return; }
+  if (!currentPhotoBlob) { showMsg('请先拍收货单照片', 'bad'); return; }
+  if (!db) { showMsg('数据库未就绪，请稍等', 'bad'); return; }
+
+  const now = new Date();
+  const timeStr = now.toLocaleString('zh-HK', { hour12: false });
+
+  const rec = {
+    id: 'R' + Date.now(),
+    barcode: barcode,
+    poNo: poNo,
+    time: timeStr,
+    createdAt: now.getTime(),
+    photoBlob: currentPhotoBlob
+  };
+
+  try {
+    await dbPut(rec);
+  } catch (e) {
+    showMsg('保存失败：' + (e.message || '未知'), 'bad');
+    return;
+  }
+
+  records.unshift(rec);
+
+  document.getElementById('barcodeInput').value = '';
+  document.getElementById('poInput').value = '';
+  clearCurrentPhoto();
+
+  renderBadge();
+  renderRecords();
+  updateStorage();
+  showSuccess();
+}
+
+function showSuccess() {
+  const el = document.getElementById('success');
+  el.classList.remove('hidden');
+  setTimeout(() => el.classList.add('hidden'), 1800);
+}
+
+/* ==========================================================
+   渲染
+   ========================================================== */
+function renderBadge() {
+  document.getElementById('savedCountBadge').textContent = '已存：' + records.length + ' 单';
+}
+
+function revokeThumbs() {
+  thumbURLs.forEach(({ url }) => { try { URL.revokeObjectURL(url); } catch (e) {} });
+  thumbURLs.clear();
+}
+
+function renderRecords() {
+  revokeThumbs();
+  const box = document.getElementById('recordsList');
+
+  if (!records.length) {
+    box.innerHTML = '<div class="hint" style="text-align:center;padding:20px;">尚未有记录</div>';
+    return;
+  }
+
+  // 先创建缩略图 URL
+  records.forEach(r => {
+    if (r.photoBlob) {
+      try { thumbURLs.set(r.id, { url: URL.createObjectURL(r.photoBlob) }); } catch (e) {}
     }
+  });
 
-    function renderRecords() {
-      const box = document.getElementById("recordsList");
-      if (!records.length) {
-        box.innerHTML = '<div class="record-sub">未有紀錄</div>';
-        return;
-      }
-
-      box.innerHTML = records.map((r, idx) => `
-        <div class="record-item">
-          <div class="record-main">${idx + 1}. 條碼：${escapeHtml(r.barcode)}</div>
-          <div class="record-sub">單號：${escapeHtml(r.grnNo || "無")} ｜ 時間：${escapeHtml(r.time)}</div>
-          <div class="record-actions">
-            <button type="button" class="btn-blue btn-small" onclick="downloadSinglePhoto('${r.id}')">下載相片</button>
-            <button type="button" class="btn-red btn-small" onclick="deleteRecord('${r.id}')">刪除</button>
-          </div>
+  box.innerHTML = records.map((r, i) => {
+    const thumb = (r.photoBlob && thumbURLs.has(r.id))
+      ? `<img src="${thumbURLs.get(r.id).url}" class="record-thumb" loading="lazy" onclick="showImageModal('${r.id}')" alt="">`
+      : '';
+    return `
+      <div class="record-item">
+        <div class="record-main">${i + 1}. 条码：${esc(r.barcode)}</div>
+        <div class="record-sub">PO：${esc(r.poNo || '无')} ｜ 时间：${esc(r.time)}</div>
+        ${thumb}
+        <div class="record-actions">
+          <button class="btn btn-blue btn-small" onclick="downloadPhoto('${r.id}')">⬇️ 下载相片</button>
+          <button class="btn btn-red btn-small" onclick="deleteRecord('${r.id}')">🗑️ 删除</button>
         </div>
-      `).join("");
-    }
+      </div>
+    `;
+  }).join('');
+}
 
-    function downloadSinglePhoto(id) {
-      const r = records.find((x) => x.id === id);
-      if (!r || !r.photo) return;
-      const a = document.createElement("a");
-      a.href = r.photo;
-      a.download = (r.barcode || "grn") + "_" + (r.grnNo || "photo") + ".jpg";
-      a.click();
-    }
+function showImageModal(id) {
+  const r = records.find(x => x.id === id);
+  if (!r || !r.photoBlob) return;
+  if (modalURL) { try { URL.revokeObjectURL(modalURL); } catch (e) {} modalURL = null; }
+  modalURL = URL.createObjectURL(r.photoBlob);
+  document.getElementById('modalImg').src = modalURL;
+  document.getElementById('imageModal').classList.remove('hidden');
+}
 
-    function exportAllPhotos() {
-      if (!records.length) {
-        showMsg("未有相片可下載");
-        return;
+function closeImageModal() {
+  document.getElementById('imageModal').classList.add('hidden');
+  if (modalURL) { try { URL.revokeObjectURL(modalURL); } catch (e) {} modalURL = null; }
+}
+
+function downloadPhoto(id) {
+  const r = records.find(x => x.id === id);
+  if (!r || !r.photoBlob) return;
+  const url = URL.createObjectURL(r.photoBlob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (r.barcode || 'grn') + '_' + (r.poNo || 'photo') + '.jpg';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+}
+
+async function deleteRecord(id) {
+  if (!confirm('确定删除此记录？')) return;
+  try { await dbDelete(id); } catch (e) { showMsg('删除失败：' + e.message, 'bad'); return; }
+  records = records.filter(r => r.id !== id);
+  renderBadge();
+  renderRecords();
+  updateStorage();
+  showMsg('已删除', 'ok');
+}
+
+async function clearAllRecords() {
+  if (!records.length) return;
+  if (!confirm(`确定清空全部 ${records.length} 条记录？此操作无法复原`)) return;
+  try { await dbClear(); } catch (e) { showMsg('清空失败：' + e.message, 'bad'); return; }
+  records = [];
+  renderBadge();
+  renderRecords();
+  updateStorage();
+  showMsg('已清空全部记录', 'ok');
+}
+
+/* ==========================================================
+   汇出
+   ========================================================== */
+function exportCsv() {
+  if (!records.length) { showMsg('未有记录可汇出', 'bad'); return; }
+  const header = ['序号','条码号码','PO / 收货单号','时间','相片档名'];
+  const rows = records.map((r, i) => [
+    i + 1,
+    r.barcode,
+    r.poNo || '',
+    r.time,
+    `${i + 1}_${r.barcode}_${r.poNo || 'photo'}.jpg`
+  ]);
+  const csv = '\uFEFF' + [header, ...rows]
+    .map(row => row.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(','))
+    .join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = '收货记录_' + new Date().toISOString().slice(0, 10) + '.csv';
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 3000);
+  showMsg('已汇出 CSV', 'ok');
+}
+
+async function exportZip() {
+  if (!records.length) { showMsg('未有记录可汇出', 'bad'); return; }
+  if (typeof JSZip === 'undefined') { showMsg('打包套件未载入，请检查网络', 'bad'); return; }
+
+  showMsg('正在打包...', 'ok');
+
+  try {
+    const zip = new JSZip();
+    const photoFolder = zip.folder('Photos');
+    const dateStr = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+
+    let csv = '\uFEFF序号,条码,PO,时间,相片档名\r\n';
+    const cell = v => '"' + String(v).replace(/"/g, '""') + '"';
+
+    for (let i = 0; i < records.length; i++) {
+      const r = records[i];
+      const seq = String(i + 1).padStart(4, '0');
+      const filename = `${r.barcode}_${dateStr}_${seq}.jpg`;
+
+      if (r.photoBlob) {
+        try {
+          // Blob -> ArrayBuffer 交给 JSZip
+          const ab = await r.photoBlob.arrayBuffer();
+          photoFolder.file(filename, ab);
+        } catch (e) { console.warn('照片读取失败', filename, e); }
       }
-      records.forEach((r, i) => {
-        if (!r.photo) return;
-        setTimeout(() => {
-          const a = document.createElement("a");
-          a.href = r.photo;
-          a.download = `${i + 1}_${r.barcode}_${r.grnNo || "grn"}.jpg`;
-          a.click();
-        }, i * 250);
-      });
-      showMsg("開始下載 " + records.length + " 張相片");
+
+      csv += [i + 1, r.barcode, r.poNo || '', r.time, filename].map(cell).join(',') + '\r\n';
     }
 
-    // ⚠️ 原本這裡 join(" 真實換行 ") 造成 SyntaxError，整個 script 不執行。
-    // 現改為 join("\r\n")，BOM 用 "\uFEFF"。
-    function exportCsv() {
-      if (!records.length) {
-        showMsg("未有紀錄可匯出");
+    zip.file('Delivery_Report.csv', csv);
+
+    const blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/zip' });
+    const filename = `Delivery_Archive_${dateStr}.zip`;
+    const zipFile = new File([blob], filename, { type: 'application/zip' });
+
+    if (navigator.canShare && navigator.canShare({ files: [zipFile] })) {
+      try {
+        await navigator.share({
+          title: '收货记录与照片',
+          text: `共 ${records.length} 单`,
+          files: [zipFile]
+        });
+        showMsg('已开启分享', 'ok');
         return;
+      } catch (err) {
+        if (err.name === 'AbortError') return;
       }
-      const header = ["序號", "條碼號碼", "收貨單號", "時間", "相片檔名"];
-      const rows = records.map((r, i) => [
-        i + 1,
-        r.barcode,
-        r.grnNo || "",
-        r.time,
-        `${i + 1}_${r.barcode}_${r.grnNo || "grn"}.jpg`
-      ]);
-      const csvContent = "\uFEFF" + [header, ...rows]
-        .map((row) => row.map((cell) => '"' + String(cell).replace(/"/g, '""') + '"').join(","))
-        .join("\r\n");
-
-      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "收貨紀錄_" + new Date().toISOString().slice(0, 10) + ".csv";
-      a.click();
-      URL.revokeObjectURL(url);
-      showMsg("已匯出 CSV 檔");
     }
 
-    function deleteRecord(id) {
-      records = records.filter((r) => r.id !== id);
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-      renderBadge();
-      renderRecords();
-      showMsg("已刪除");
-    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+    showMsg('已下载 ZIP', 'ok');
+  } catch (e) {
+    console.error(e);
+    showMsg('打包失败：' + (e.message || '未知'), 'bad');
+  }
+}
 
-    function clearAllRecords() {
-      if (!records.length) return;
-      if (!confirm("確定清空全部紀錄？")) return;
-      records = [];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-      renderBadge();
-      renderRecords();
-      showMsg("已清空");
-    }
+/* ==========================================================
+   工具
+   ========================================================== */
+function showMsg(text, type) {
+  const el = document.getElementById('statusBanner');
+  el.textContent = text;
+  if (type === 'ok') {
+    el.style.background = '#d1fae5'; el.style.color = '#065f46'; el.style.borderColor = '#10b981';
+  } else if (type === 'bad') {
+    el.style.background = '#fee2e2'; el.style.color = '#991b1b'; el.style.borderColor = '#ef4444';
+  } else {
+    el.style.background = '#fef3c7'; el.style.color = '#78350f'; el.style.borderColor = '#d97706';
+  }
+  el.classList.add('show');
+  clearTimeout(window._msgTimer);
+  window._msgTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
 
-    function escapeHtml(str) {
-      return String(str).replace(/[&<>"']/g, (m) => ({
-        "&": "&amp;",
-        "<": "&lt;",
-        ">": "&gt;",
-        '"': "&quot;",
-        "'": "&#39;"
-      }[m]));
-    }
+function playBeep() {
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(1050, ctx.currentTime);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.start(); osc.stop(ctx.currentTime + 0.12);
+  } catch (e) {}
+}
 
-    init();
-  </script>
+function esc(s) {
+  return String(s).replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]));
+}
+
+async function updateStorage() {
+  const el = document.getElementById('storageInfo');
+  if (!el) return;
+  if (!navigator.storage || !navigator.storage.estimate) {
+    el.textContent = '';
+    return;
+  }
+  try {
+    const { usage } = await navigator.storage.estimate();
+    el.textContent = '已用储存：' + formatBytes(usage);
+  } catch (e) { el.textContent = ''; }
+}
+
+function formatBytes(b) {
+  if (!b || b <= 0) return '0 B';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (b >= 1024 && i < u.length - 1) { b /= 1024; i++; }
+  return b.toFixed(i ? 1 : 0) + ' ' + u[i];
+}
+
+/* ==========================================================
+   启动
+   ========================================================== */
+async function init() {
+  try {
+    db = await openDB();
+    await migrateLegacy();
+    const all = await dbGetAll();
+    all.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    records = all;
+    renderBadge();
+    renderRecords();
+    updateStorage();
+  } catch (e) {
+    console.error('初始化失败', e);
+    showMsg('数据库初始化失败：' + (e.message || '未知'), 'bad');
+  }
+}
+init();
+
+/* 全局错误兜底 */
+window.addEventListener('error', function (e) {
+  const el = document.getElementById('statusBanner');
+  if (el) {
+    el.textContent = '程式错误：' + (e.message || '未知');
+    el.style.background = '#fee2e2';
+    el.style.color = '#991b1b';
+    el.style.borderColor = '#ef4444';
+    el.classList.add('show');
+  }
+});
+</script>
 </body>
 </html>

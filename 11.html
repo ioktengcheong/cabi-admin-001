@@ -3,73 +3,221 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>GRN Photo Scanner & OCR Export</title>
+  <title>GRN Batch OCR (1–100) — PO, Requester, Item Code & Door Link</title>
   <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/@zxing/browser@0.1.5/umd/zxing-browser.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: #f1f5f9; color: #0f172a; padding: 14px; }
-    .app { max-width: 1200px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
-    .bar { background: #0f172a; color: #fff; padding: 12px 14px; border-radius: 10px; display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; }
-    .bar h1 { font-size: 15px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f1f5f9;
+      color: #0f172a;
+      padding: 14px;
+    }
+    .app { max-width: 1280px; margin: 0 auto; display: flex; flex-direction: column; gap: 12px; }
+    .bar {
+      background: #0f172a;
+      color: #fff;
+      padding: 12px 16px;
+      border-radius: 10px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .bar h1 { font-size: 15px; font-weight: 700; }
+    .sub { font-size: 11px; color: #94a3b8; }
     .actions { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
-    button { cursor: pointer; border: none; border-radius: 7px; padding: 8px 11px; font-size: 12px; font-weight: 600; }
+    button {
+      cursor: pointer;
+      border: none;
+      border-radius: 7px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      transition: opacity 0.15s ease;
+    }
+    button:hover:not(:disabled) { opacity: 0.9; }
+    button:disabled { opacity: 0.45; cursor: not-allowed; }
     .btn-blue { background: #2563eb; color: #fff; }
     .btn-green { background: #10b981; color: #052e16; }
+    .btn-amber { background: #f59e0b; color: #1e1b4b; }
     .btn-light { background: #e2e8f0; color: #0f172a; }
-    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
-    .card { background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
-    .preview-box { background: #0f172a; border-radius: 8px; height: 280px; display: flex; align-items: center; justify-content: center; overflow: hidden; color: #94a3b8; font-size: 12px; }
-    .preview-box canvas { max-width: 100%; max-height: 100%; object-fit: contain; }
+    .grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 12px; }
+    @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+    .card {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+    .preview-box {
+      position: relative;
+      background: #0f172a;
+      border-radius: 8px;
+      height: 330px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      color: #94a3b8;
+      font-size: 12px;
+    }
+    .preview-stage {
+      position: relative;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      max-width: 100%;
+      max-height: 100%;
+    }
+    .preview-stage canvas {
+      max-width: 100%;
+      max-height: 330px;
+      width: auto;
+      height: auto;
+      display: block;
+    }
+    .highlight-box {
+      position: absolute;
+      border: 2.5px solid #ef4444;
+      background: rgba(239, 68, 68, 0.18);
+      pointer-events: none;
+      border-radius: 2px;
+    }
     .row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (max-width: 560px) { .row-2 { grid-template-columns: 1fr; } }
     label { display: block; font-size: 11px; font-weight: 700; color: #475569; margin-bottom: 4px; }
-    input { width: 100%; padding: 8px 10px; border: 1px solid #94a3b8; border-radius: 7px; font-family: monospace; font-size: 13px; }
-    .door-box { background: #fef08a; border-color: #eab308; font-weight: 800; text-align: center; font-size: 16px; }
-    .status { font-size: 12px; color: #334155; background: #f8fafc; border: 1px solid #e2e8f0; padding: 7px 10px; border-radius: 7px; }
-    .table-wrap { background: #fff; border: 1px solid #cbd5e1; border-radius: 10px; overflow-x: auto; }
+    input {
+      width: 100%;
+      padding: 8px 10px;
+      border: 1px solid #94a3b8;
+      border-radius: 7px;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      font-size: 13px;
+    }
+    .door-box {
+      background: #fef08a;
+      border-color: #eab308;
+      font-weight: 800;
+      text-align: center;
+      font-size: 16px;
+    }
+    .item-code-input {
+      color: #dc2626;
+      font-weight: 700;
+      border-color: #fca5a5;
+      background: #fef2f2;
+    }
+    .item-red {
+      color: #dc2626;
+      font-weight: 700;
+      font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    .status {
+      font-size: 12px;
+      color: #1e293b;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 8px 10px;
+      border-radius: 7px;
+      line-height: 1.4;
+    }
+    .progress-track {
+      width: 100%;
+      height: 7px;
+      background: #e2e8f0;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      width: 0%;
+      background: #2563eb;
+      transition: width 0.2s ease;
+    }
+    .table-wrap {
+      background: #fff;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      overflow-x: auto;
+    }
     table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    th, td { padding: 8px 10px; border-bottom: 1px solid #e2e8f0; text-align: left; }
+    th, td {
+      padding: 8px 10px;
+      border-bottom: 1px solid #e2e8f0;
+      text-align: left;
+      vertical-align: top;
+    }
     th { background: #f8fafc; font-weight: 700; color: #334155; }
     tr.active { background: #eff6ff; }
     .hidden { display: none; }
+    details.raw-box { font-size: 11px; color: #475569; }
+    details.raw-box pre {
+      margin-top: 6px;
+      max-height: 110px;
+      overflow: auto;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 8px;
+      border-radius: 6px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
   </style>
 </head>
 <body>
   <input type="file" id="photoInput" accept="image/*" multiple class="hidden" />
   <div class="app">
     <div class="bar">
-      <h1>GRN Scanner & OCR</h1>
+      <div>
+        <h1>GRN Batch OCR & Barcode Scanner (1–100)</h1>
+        <div class="sub">Captures PO (3401...), Requester, Item Codes (Red Highlight), and Scanner Password → Last 2 Digits = Door #</div>
+      </div>
       <div class="actions">
-        <button id="btnAddPhoto" class="btn-blue">+ Insert Photo</button>
+        <button id="btnAddPhoto" class="btn-blue">+ Insert GRNs (1–100)</button>
+        <button id="btnScanAll" class="btn-amber">Scan All</button>
+        <button id="btnStopScan" class="btn-light" disabled>Stop</button>
         <button id="btnExportXlsx" class="btn-green">Export .xlsx</button>
         <button id="btnExportCsv" class="btn-light">Export .csv</button>
       </div>
     </div>
 
+    <div class="progress-track">
+      <div id="progressFill" class="progress-fill"></div>
+    </div>
+
     <div class="grid">
       <div class="card">
-        <div class="preview-box" id="previewBox">No photo inserted</div>
+        <div class="preview-box" id="previewBox">No GRN photos inserted</div>
         <div class="actions">
           <button id="btnRotate" class="btn-light">↻ Rotate 90°</button>
-          <button id="btnScanNow" class="btn-blue">Scan Photo</button>
+          <button id="btnScanNow" class="btn-blue">Scan Current</button>
           <button id="btnPrev" class="btn-light">Prev</button>
           <button id="btnNext" class="btn-light">Next</button>
-          <span id="photoCounter" style="margin-left:auto; font-size:12px; color:#64748b;">0 / 0</span>
+          <span id="photoCounter" style="margin-left:auto; font-size:12px; color:#64748b; font-weight:600;">0 / 0</span>
         </div>
-        <div class="status" id="statusMsg">Insert a photo to start.</div>
+        <div class="status" id="statusMsg">Insert GRN photos (up to 100 at once) to begin scanning.</div>
+        <details class="raw-box">
+          <summary>View Raw OCR Text (for tuning)</summary>
+          <pre id="rawOcrPreview"></pre>
+        </details>
       </div>
 
       <div class="card">
         <div class="row-2">
           <div>
-            <label for="pwInput">1. Password (9 digits)</label>
-            <input id="pwInput" type="text" placeholder="9-digit password" />
+            <label for="pwInput">1. Scanner Password (9 digits)</label>
+            <input id="pwInput" type="text" placeholder="e.g. 172498132" />
           </div>
           <div>
-            <label for="doorInput">Door # (Auto Last 2)</label>
-            <input id="doorInput" type="text" class="door-box" placeholder="--" />
+            <label for="doorInput">Door # (Auto Last 2 Digits)</label>
+            <input id="doorInput" type="text" class="door-box" placeholder="--" maxlength="2" />
           </div>
         </div>
         <div class="row-2">
@@ -78,12 +226,17 @@
             <input id="poInput" type="text" placeholder="3401xxxxxx" />
           </div>
           <div>
-            <label for="reqInput">Requestor (OCR)</label>
-            <input id="reqInput" type="text" placeholder="username or 08xxxxxx" />
+            <label for="reqInput">3. Requester</label>
+            <input id="reqInput" type="text" placeholder="e.g. martin.tai or 08xxxxxx" />
           </div>
         </div>
+        <div>
+          <label for="itemInput">4. Item Code(s) — Highlighted in Red (comma-separated)</label>
+          <input id="itemInput" type="text" class="item-code-input" placeholder="e.g. XF28100109, XA02100058" />
+        </div>
         <div class="actions">
-          <button id="btnSaveNext" class="btn-green">Save & Next</button>
+          <button id="btnSaveNext" class="btn-green">Confirm & Next</button>
+          <button id="btnClearFields" class="btn-light">Clear Fields</button>
           <button id="btnDelete" class="btn-light">Delete</button>
         </div>
       </div>
@@ -98,21 +251,24 @@
             <th>Password</th>
             <th>Door #</th>
             <th>PO Number</th>
-            <th>Requestor</th>
+            <th>Requester</th>
+            <th>Item Code (Red)</th>
+            <th>Status</th>
           </tr>
         </thead>
         <tbody id="tableBody">
-          <tr><td colspan="6" style="text-align:center; color:#94a3b8; padding:18px;">No records yet</td></tr>
+          <tr><td colspan="8" style="text-align:center; color:#94a3b8; padding:18px;">No GRN records yet</td></tr>
         </tbody>
       </table>
     </div>
   </div>
 
   <script>
-    const OCR_CONFIG = {
+    const CONFIG = {
       poPrefix: "3401",
-      poDigits: 10,
-      passwordDigits: 9
+      poLength: 10,
+      passwordLength: 9,
+      maxBatchSize: 100
     };
 
     const state = {
@@ -120,7 +276,7 @@
       activeIndex: -1,
       worker: null,
       scanning: false,
-      workerInitialized: false
+      stopRequested: false
     };
 
     const el = {
@@ -128,839 +284,492 @@
       previewBox: document.getElementById("previewBox"),
       photoCounter: document.getElementById("photoCounter"),
       statusMsg: document.getElementById("statusMsg"),
+      rawOcrPreview: document.getElementById("rawOcrPreview"),
+      progressFill: document.getElementById("progressFill"),
       pwInput: document.getElementById("pwInput"),
       doorInput: document.getElementById("doorInput"),
       poInput: document.getElementById("poInput"),
       reqInput: document.getElementById("reqInput"),
-      tableBody: document.getElementById("tableBody")
+      itemInput: document.getElementById("itemInput"),
+      tableBody: document.getElementById("tableBody"),
+      btnScanAll: document.getElementById("btnScanAll"),
+      btnStopScan: document.getElementById("btnStopScan")
     };
 
     function current() {
       return state.items[state.activeIndex] || null;
     }
 
+    // Auto-link Door # from last two digits of Password
     function applyPassword(rawPassword, item = current()) {
-      if (!item) {
-        return;
-      }
-
-      const digits = String(rawPassword || "")
-        .replace(/\D/g, "");
-
-      if (digits.length === OCR_CONFIG.passwordDigits) {
-        item.password = digits;
-        item.door = digits.slice(-2);
+      if (!item) return;
+      const cleaned = String(rawPassword || "").replace(/\D/g, "");
+      item.password = cleaned;
+      if (cleaned.length >= 2) {
+        item.door = cleaned.slice(-2);
       } else {
-        item.password = "";
         item.door = "";
       }
     }
 
-    function getRotatedCanvas(img, rotation = 0, options = {}) {
-      const {
-        scale = 1,
-        maxDimension = 3600,
-        removeRedInk = true,
-        grayscale = true,
-        contrast = 1.25,
-        threshold = 0
-      } = options;
-
-      const radians = rotation * Math.PI / 180;
-      const sin = Math.abs(Math.sin(radians));
-      const cos = Math.abs(Math.cos(radians));
-
-      const sourceWidth =
-        img.naturalWidth || img.width;
-
-      const sourceHeight =
-        img.naturalHeight || img.height;
-
-      const rotatedWidth =
-        sourceWidth * cos + sourceHeight * sin;
-
-      const rotatedHeight =
-        sourceWidth * sin + sourceHeight * cos;
-
-      const fitScale =
-        Math.min(
-          1,
-          maxDimension /
-          Math.max(rotatedWidth, rotatedHeight)
-        );
-
-      const finalScale = fitScale * scale;
-
-      const canvasWidth =
-        Math.max(
-          1,
-          Math.round(rotatedWidth * finalScale)
-        );
-
-      const canvasHeight =
-        Math.max(
-          1,
-          Math.round(rotatedHeight * finalScale)
-        );
-
-      const canvas =
-        document.createElement("canvas");
-
-      canvas.width = canvasWidth;
-      canvas.height = canvasHeight;
-
-      const ctx = canvas.getContext("2d", {
-        willReadFrequently: true
-      });
-
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvasWidth, canvasHeight);
-
-      ctx.save();
-      ctx.translate(canvasWidth / 2, canvasHeight / 2);
-      ctx.rotate(radians);
-
-      ctx.drawImage(
-        img,
-        -(sourceWidth * finalScale) / 2,
-        -(sourceHeight * finalScale) / 2,
-        sourceWidth * finalScale,
-        sourceHeight * finalScale
-      );
-
-      ctx.restore();
-
-      if (
-        removeRedInk ||
-        grayscale ||
-        threshold > 0
-      ) {
-        const imageData =
-          ctx.getImageData(
-            0,
-            0,
-            canvasWidth,
-            canvasHeight
-          );
-
-        const pixels = imageData.data;
-
-        for (let i = 0; i < pixels.length; i += 4) {
-          const red = pixels[i];
-          const green = pixels[i + 1];
-          const blue = pixels[i + 2];
-
-          const isRedInk =
-            red > 150 &&
-            red > green * 1.25 &&
-            red > blue * 1.25 &&
-            red - blue > 45;
-
-          if (removeRedInk && isRedInk) {
-            pixels[i] = 255;
-            pixels[i + 1] = 255;
-            pixels[i + 2] = 255;
-            continue;
-          }
-
-          if (grayscale) {
-            let gray =
-              red * 0.299 +
-              green * 0.587 +
-              blue * 0.114;
-
-            if (contrast !== 1) {
-              gray =
-                (gray - 128) * contrast + 128;
-            }
-
-            gray = Math.max(
-              0,
-              Math.min(255, gray)
-            );
-
-            if (threshold > 0) {
-              gray =
-                gray >= threshold
-                  ? 255
-                  : 0;
-            }
-
-            pixels[i] = gray;
-            pixels[i + 1] = gray;
-            pixels[i + 2] = gray;
-          }
-        }
-
-        ctx.putImageData(imageData, 0, 0);
-      }
-
-      return canvas;
-    }
-
-    function cropCanvas(
-      source,
-      x,
-      y,
-      width,
-      height,
-      padding = 0
-    ) {
-      const sx =
-        Math.max(
-          0,
-          Math.round(x - padding)
-        );
-
-      const sy =
-        Math.max(
-          0,
-          Math.round(y - padding)
-        );
-
-      const sw =
-        Math.max(
-          1,
-          Math.min(
-            source.width - sx,
-            Math.round(width + padding * 2)
-          )
-        );
-
-      const sh =
-        Math.max(
-          1,
-          Math.min(
-            source.height - sy,
-            Math.round(height + padding * 2)
-          )
-        );
-
-      const canvas =
-        document.createElement("canvas");
-
-      canvas.width = sw;
-      canvas.height = sh;
-
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, sw, sh);
-
-      ctx.drawImage(
-        source,
-        sx,
-        sy,
-        sw,
-        sh,
-        0,
-        0,
-        sw,
-        sh
-      );
-
-      return canvas;
-    }
-
-    async function getWorker() {
-      if (state.worker) {
-        return state.worker;
-      }
-
-      state.worker =
-        await Tesseract.createWorker("eng");
-
-      await state.worker.setParameters({
-        preserve_interword_spaces: "1",
-        tessedit_pageseg_mode: "11"
-      });
-
-      state.workerInitialized = true;
-      return state.worker;
-    }
-
-    async function recognise(
-      canvas,
-      whitelist = "",
-      pageSegMode = "11"
-    ) {
-      const worker = await getWorker();
-
-      await worker.setParameters({
-        preserve_interword_spaces: "1",
-        tessedit_pageseg_mode: pageSegMode,
-        tessedit_char_whitelist: whitelist
-      });
-
-      const output =
-        await worker.recognize(canvas);
-
-      return {
-        text: output.data.text || "",
-        confidence:
-          Number(output.data.confidence || 0)
-      };
-    }
-
-    function digitsOnly(text) {
+    function normalizeDigits(text) {
       return String(text || "")
         .replace(/[Oo]/g, "0")
         .replace(/[Il|]/g, "1")
         .replace(/[Ss]/g, "5")
+        .replace(/[Bb]/g, "8")
         .replace(/\D/g, "");
     }
 
     function extractPoNumber(text) {
-      const digits = digitsOnly(text);
-      const matches =
-        digits.match(/\d{10}/g) || [];
-
-      for (const candidate of matches) {
-        if (
-          candidate.startsWith(
-            OCR_CONFIG.poPrefix
-          )
-        ) {
-          return candidate;
-        }
-      }
-
-      return "";
+      const normalized = normalizeDigits(text);
+      const regex = new RegExp(`${CONFIG.poPrefix}\\d{${CONFIG.poLength - CONFIG.poPrefix.length}}`, "g");
+      const matches = normalized.match(regex) || [];
+      return matches[0] || "";
     }
 
-    function extractPassword(text) {
-      const digits = digitsOnly(text);
-      const matches =
-        digits.match(/\d{9}/g) || [];
+    function extractBarcodePassword(rawValue) {
+      const digits = String(rawValue || "").replace(/\D/g, "");
+      if (digits.length === CONFIG.passwordLength) return digits;
+      const m = digits.match(/\d{9}/);
+      return m ? m[0] : "";
+    }
 
-      for (const candidate of matches) {
-        if (
-          !candidate.startsWith("2056")
-        ) {
-          return candidate;
+    function extractOcrPasswordNearLabel(text) {
+      // Only use OCR fallback if near locker/barcode cues and not a GRN receipt number (50045...)
+      const lines = String(text || "").split(/\r?\n/);
+      for (const line of lines) {
+        if (/柜|门|开门|失效/.test(line)) {
+          const d = normalizeDigits(line);
+          const m = d.match(/\d{9}/);
+          if (m && !m[0].startsWith("5004")) return m[0];
         }
       }
-
       return "";
     }
 
     function extractRequester(text) {
       const lines = String(text || "")
         .replace(/[|]/g, "I")
-        .split(/\n/)
-        .map(line => line.trim())
+        .split(/\r?\n/)
+        .map(l => l.trim())
         .filter(Boolean);
 
+      // Priority 1: Look on or near lines containing "Requestor"
+      for (let i = 0; i < lines.length; i++) {
+        if (/requestor/i.test(lines[i])) {
+          const windowText = [lines[i], lines[i + 1] || "", lines[i + 2] || ""].join(" ");
+          const userMatch = windowText.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/);
+          if (userMatch && !/^(curr|price|net|amt|unit|dept|cea)$/i.test(userMatch[1])) {
+            return userMatch[1].toLowerCase();
+          }
+          const idMatch = windowText.match(/\b(08\d{6})\b/);
+          if (idMatch) return idMatch[1];
+        }
+      }
+
+      // Priority 2: Known email/username dot pattern excluding "Curr." / "Price..."
       for (const line of lines) {
-        const username =
-          line.match(
-            /\b[A-Za-z]{2,20}\.[A-Za-z]{1,20}\b/
-          );
-
-        if (
-          username &&
-          username[0]
-            .toLowerCase() !== "com"
-        ) {
-          return username[0].toLowerCase();
+        if (/entered\s*by|curr\.?|unit\s*price|po\s*net\s*amt/i.test(line)) continue;
+        const matches = line.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/g) || [];
+        for (const m of matches) {
+          const lower = m.toLowerCase();
+          if (!lower.startsWith("curr") && !lower.includes("price") && lower !== "no.of") {
+            return lower;
+          }
         }
+      }
 
-        const employeeNumber =
-          line.match(/\b08\d{6}\b/);
-
-        if (employeeNumber) {
-          return employeeNumber[0];
-        }
+      // Priority 3: 8-digit requestor ID starting with 08 (excluding "Entered by")
+      for (const line of lines) {
+        if (/entered\s*by/i.test(line)) continue;
+        const idMatch = line.match(/\b(08\d{6})\b/);
+        if (idMatch) return idMatch[1];
       }
 
       return "";
     }
 
-    function parseOcr(text, item) {
-      if (!item) {
-        return;
-      }
+    function extractItemCodes(text) {
+      const raw = String(text || "");
+      const candidates = raw.match(/\b[A-Z]{2,4}\d{6,10}\b/g) || [];
+      const excludedPrefixes = ["PRG", "CEA", "MOP", "USD", "HKD", "CNY"];
+      const seen = new Set();
+      const result = [];
 
-      if (!item.po) {
-        item.po =
-          extractPoNumber(text);
-      }
-
-      if (!item.password) {
-        item.password =
-          extractPassword(text);
-
-        if (item.password) {
-          applyPassword(
-            item.password,
-            item
-          );
+      for (const code of candidates) {
+        if (code.startsWith(CONFIG.poPrefix)) continue;
+        if (excludedPrefixes.some(p => code.startsWith(p))) continue;
+        if (!seen.has(code)) {
+          seen.add(code);
+          result.push(code);
         }
       }
-
-      if (!item.requester) {
-        item.requester =
-          extractRequester(text);
-      }
+      return result;
     }
 
-    async function scanBarcodeFromCanvas(canvas) {
-      if ("BarcodeDetector" in window) {
-        try {
-          const detector =
-            new BarcodeDetector({
-              formats: [
-                "code_128",
-                "code_39",
-                "ean_13",
-                "ean_8",
-                "upc_a",
-                "qr_code"
-              ]
+    function buildCanvas(img, rotation = 0, options = {}) {
+      const {
+        scale = 1,
+        maxDimension = 2800,
+        grayscale = false,
+        contrast = 1,
+        threshold = 0
+      } = options;
+
+      const rad = (rotation * Math.PI) / 180;
+      const sin = Math.abs(Math.sin(rad));
+      const cos = Math.abs(Math.cos(rad));
+      const sw = img.naturalWidth || img.width;
+      const sh = img.naturalHeight || img.height;
+
+      const rw = sw * cos + sh * sin;
+      const rh = sw * sin + sh * cos;
+      const fit = Math.min(1, maxDimension / Math.max(rw, rh));
+      const finalScale = fit * scale;
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(rw * finalScale));
+      canvas.height = Math.max(1, Math.round(rh * finalScale));
+
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      ctx.save();
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(rad);
+      ctx.drawImage(img, -(sw * finalScale) / 2, -(sh * finalScale) / 2, sw * finalScale, sh * finalScale);
+      ctx.restore();
+
+      if (grayscale || threshold > 0) {
+        const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        const d = imgData.data;
+        for (let i = 0; i < d.length; i += 4) {
+          let g = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+          if (contrast !== 1) g = (g - 128) * contrast + 128;
+          g = Math.max(0, Math.min(255, g));
+          if (threshold > 0) g = g >= threshold ? 255 : 0;
+          d[i] = d[i + 1] = d[i + 2] = g;
+        }
+        ctx.putImageData(imgData, 0, 0);
+      }
+
+      return { canvas, scale: finalScale, rotatedW: rw, rotatedH: rh };
+    }
+
+    function cropCanvas(source, rx, ry, rw, rh) {
+      const sx = Math.max(0, Math.round(source.width * rx));
+      const sy = Math.max(0, Math.round(source.height * ry));
+      const sw = Math.max(1, Math.min(source.width - sx, Math.round(source.width * rw)));
+      const sh = Math.max(1, Math.min(source.height - sy, Math.round(source.height * rh)));
+
+      const c = document.createElement("canvas");
+      c.width = sw;
+      c.height = sh;
+      const ctx = c.getContext("2d");
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, sw, sh);
+      ctx.drawImage(source, sx, sy, sw, sh, 0, 0, sw, sh);
+      return c;
+    }
+
+    async function getWorker() {
+      if (state.worker) return state.worker;
+      state.worker = await Tesseract.createWorker("eng");
+      return state.worker;
+    }
+
+    async function runOcr(canvas, psm = "6", whitelist = "") {
+      const worker = await getWorker();
+      await worker.setParameters({
+        preserve_interword_spaces: "1",
+        tessedit_pageseg_mode: psm,
+        tessedit_char_whitelist: whitelist
+      });
+      const res = await worker.recognize(canvas);
+      const words = (res.data.words || []).map(w => ({
+        text: w.text || "",
+        bbox: w.bbox || null
+      }));
+      return {
+        text: res.data.text || "",
+        confidence: Number(res.data.confidence || 0),
+        words
+      };
+    }
+
+    async function scanBarcodeMultiRegion(rotatedCanvas) {
+      const regions = [
+        rotatedCanvas,
+        cropCanvas(rotatedCanvas, 0.0, 0.0, 0.55, 1.0),
+        cropCanvas(rotatedCanvas, 0.45, 0.0, 0.55, 1.0),
+        cropCanvas(rotatedCanvas, 0.0, 0.45, 1.0, 0.55)
+      ];
+
+      for (const region of regions) {
+        if ("BarcodeDetector" in window) {
+          try {
+            const detector = new BarcodeDetector({
+              formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "itf"]
             });
-
-          const results =
-            await detector.detect(canvas);
-
-          for (const result of results) {
-            const raw =
-              String(
-                result.rawValue || ""
-              ).trim();
-
-            if (/^\d{9}$/.test(raw)) {
-              return raw;
+            const codes = await detector.detect(region);
+            for (const c of codes) {
+              const pw = extractBarcodePassword(c.rawValue);
+              if (pw) return pw;
             }
+          } catch (_) {}
+        }
 
-            const digits =
-              raw.replace(/\D/g, "");
-
-            if (/^\d{9}$/.test(digits)) {
-              return digits;
+        if (window.ZXingBrowser) {
+          try {
+            const reader = new ZXingBrowser.BrowserMultiFormatReader();
+            const result = await reader.decodeFromImageUrl(region.toDataURL("image/png"));
+            if (result) {
+              const pw = extractBarcodePassword(result.getText());
+              if (pw) return pw;
             }
-          }
-        } catch (error) {
-          // Try ZXing next.
+          } catch (_) {}
         }
       }
-
-      if (window.ZXingBrowser) {
-        try {
-          const hints = new Map();
-
-          if (
-            ZXingBrowser.DecodeHintType
-          ) {
-            hints.set(
-              ZXingBrowser
-                .DecodeHintType
-                .TRY_HARDER,
-              true
-            );
-
-            hints.set(
-              ZXingBrowser
-                .DecodeHintType
-                .POSSIBLE_FORMATS,
-              [
-                ZXingBrowser
-                  .BarcodeFormat
-                  .CODE_128,
-                ZXingBrowser
-                  .BarcodeFormat
-                  .CODE_39,
-                ZXingBrowser
-                  .BarcodeFormat
-                  .EAN_13
-              ]
-            );
-          }
-
-          const reader =
-            new ZXingBrowser
-              .BrowserMultiFormatReader(
-                hints
-              );
-
-          const result =
-            await reader.decodeFromImageUrl(
-              canvas.toDataURL("image/png")
-            );
-
-          if (result) {
-            const raw =
-              String(
-                result.getText() || ""
-              ).trim();
-
-            const digits =
-              raw.replace(/\D/g, "");
-
-            if (/^\d{9}$/.test(digits)) {
-              return digits;
-            }
-          }
-        } catch (error) {
-          // Barcode unavailable.
-        }
-      }
-
       return "";
+    }
+
+    function computeItemHighlights(words, itemCodes, ocrW, ocrH, previewW, previewH) {
+      if (!words.length || !itemCodes.length || !ocrW || !ocrH) return [];
+      const codeSet = new Set(itemCodes.map(c => c.toUpperCase()));
+      const boxes = [];
+
+      for (const w of words) {
+        const clean = String(w.text || "").replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+        if (codeSet.has(clean) && w.bbox) {
+          const x = (w.bbox.x0 / ocrW) * previewW;
+          const y = (w.bbox.y0 / ocrH) * previewH;
+          const width = ((w.bbox.x1 - w.bbox.x0) / ocrW) * previewW;
+          const height = ((w.bbox.y1 - w.bbox.y0) / ocrH) * previewH;
+          boxes.push({ x, y, width, height });
+        }
+      }
+      return boxes;
     }
 
     async function scanItem(item) {
-      if (!item || !item.img) {
-        return;
+      if (!item || !item.img) return;
+      item.status = "Scanning...";
+      renderTableOnly();
+
+      el.statusMsg.textContent = `Scanning ${item.name} (${item.rotation}°)...`;
+
+      const { canvas: rawRot } = buildCanvas(item.img, item.rotation || 0, {
+        scale: 1,
+        maxDimension: 2200,
+        grayscale: false
+      });
+
+      const barcodePw = await scanBarcodeMultiRegion(rawRot);
+
+      const { canvas: ocrCanvas } = buildCanvas(item.img, item.rotation || 0, {
+        scale: 1.2,
+        maxDimension: 2600,
+        grayscale: true,
+        contrast: 1.3
+      });
+
+      const pageRes = await runOcr(ocrCanvas, "6", "");
+      item.rawText = pageRes.text;
+
+      let po = extractPoNumber(pageRes.text);
+      let req = extractRequester(pageRes.text);
+      let items = extractItemCodes(pageRes.text);
+      let pw = barcodePw || extractOcrPasswordNearLabel(pageRes.text);
+
+      // Targeted fallback for PO if missed
+      if (!po) {
+        const rightHalf = cropCanvas(ocrCanvas, 0.45, 0.0, 0.55, 0.7);
+        const poRes = await runOcr(rightHalf, "6", "0123456789POno:/ ");
+        po = extractPoNumber(poRes.text);
       }
 
+      // Targeted fallback for Item Codes if missed
+      if (!items.length) {
+        const goodsArea = cropCanvas(ocrCanvas, 0.0, 0.15, 0.85, 0.65);
+        const goodsRes = await runOcr(goodsArea, "6", "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789 ");
+        items = extractItemCodes(goodsRes.text);
+      }
+
+      item.po = po || item.po || "";
+      item.requester = req || item.requester || "";
+      item.itemCodes = items.length ? items : (item.itemCodes || []);
+      item.ocrWords = pageRes.words;
+      item.ocrWidth = ocrCanvas.width;
+      item.ocrHeight = ocrCanvas.height;
+
+      if (pw) {
+        applyPassword(pw, item);
+      }
+
+      item.status = (item.po && item.requester && item.itemCodes.length) ? "Done" : "Review";
       el.statusMsg.textContent =
-        `Scanning ${item.name}...`;
-
-      const barcodeCanvas =
-        getRotatedCanvas(
-          item.img,
-          item.rotation || 0,
-          {
-            scale: 1,
-            maxDimension: 3200,
-            removeRedInk: false,
-            grayscale: false
-          }
-        );
-
-      const barcodePassword =
-        await scanBarcodeFromCanvas(
-          barcodeCanvas
-        );
-
-      if (barcodePassword) {
-        applyPassword(
-          barcodePassword,
-          item
-        );
-      }
-
-      const ocrCanvas =
-        getRotatedCanvas(
-          item.img,
-          item.rotation || 0,
-          {
-            scale: 1.25,
-            maxDimension: 3600,
-            removeRedInk: true,
-            grayscale: true,
-            contrast: 1.25
-          }
-        );
-
-      const pageResult =
-        await recognise(
-          ocrCanvas,
-          "",
-          "11"
-        );
-
-      parseOcr(
-        pageResult.text,
-        item
-      );
-
-      if (!item.po || !item.password) {
-        const numericCanvas =
-          getRotatedCanvas(
-            item.img,
-            item.rotation || 0,
-            {
-              scale: 1.5,
-              maxDimension: 4200,
-              removeRedInk: true,
-              grayscale: true,
-              contrast: 1.4,
-              threshold: 180
-            }
-          );
-
-        const numericResult =
-          await recognise(
-            numericCanvas,
-            "0123456789",
-            "11"
-          );
-
-        if (!item.po) {
-          item.po =
-            extractPoNumber(
-              numericResult.text
-            );
-        }
-
-        if (
-          !item.password &&
-          !barcodePassword
-        ) {
-          item.password =
-            extractPassword(
-              numericResult.text
-            );
-
-          if (item.password) {
-            applyPassword(
-              item.password,
-              item
-            );
-          }
-        }
-      }
-
-      if (!item.po) {
-        const poCrop =
-          cropCanvas(
-            ocrCanvas,
-            ocrCanvas.width * 0.58,
-            ocrCanvas.height * 0.18,
-            ocrCanvas.width * 0.34,
-            ocrCanvas.height * 0.16,
-            ocrCanvas.width * 0.01
-          );
-
-        const poResult =
-          await recognise(
-            poCrop,
-            "0123456789",
-            "7"
-          );
-
-        item.po =
-          extractPoNumber(
-            poResult.text
-          );
-      }
-
-      if (!item.requester) {
-        const requesterCrop =
-          cropCanvas(
-            ocrCanvas,
-            ocrCanvas.width * 0.02,
-            ocrCanvas.height * 0.20,
-            ocrCanvas.width * 0.36,
-            ocrCanvas.height * 0.20,
-            ocrCanvas.width * 0.01
-          );
-
-        const requesterResult =
-          await recognise(
-            requesterCrop,
-            "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789.",
-            "7"
-          );
-
-        item.requester =
-          extractRequester(
-            requesterResult.text
-          );
-      }
-
-      el.statusMsg.textContent =
-        `PW: ${item.password || "—"} | ` +
-        `Door: ${item.door || "—"} | ` +
-        `PO: ${item.po || "—"} | ` +
-        `Req: ${item.requester || "—"}`;
+        `${item.name} → PW: ${item.password || "—"} | Door: ${item.door || "—"} | ` +
+        `PO: ${item.po || "—"} | Req: ${item.requester || "—"} | Items: ${item.itemCodes.join(", ") || "—"}`;
     }
 
-    async function scanAllQueue(startIndex) {
-      if (state.scanning) {
-        return;
-      }
-
+    async function scanAllQueue(startIndex = 0) {
+      if (state.scanning || !state.items.length) return;
       state.scanning = true;
+      state.stopRequested = false;
+      el.btnScanAll.disabled = true;
+      el.btnStopScan.disabled = false;
 
-      for (
-        let i = startIndex;
-        i < state.items.length;
-        i++
-      ) {
-        await scanItem(
-          state.items[i]
-        );
-
-        renderTableOnly();
-
-        if (i === state.activeIndex) {
-          renderInputsOnly();
-
-          const item =
-            state.items[state.activeIndex];
-
-          el.statusMsg.textContent =
-            `PW: ${item.password || "—"} | ` +
-            `Door: ${item.door || "—"} | ` +
-            `PO: ${item.po || "—"} | ` +
-            `Req: ${item.requester || "—"}`;
-        }
+      const total = state.items.length;
+      for (let i = startIndex; i < total; i++) {
+        if (state.stopRequested) break;
+        state.activeIndex = i;
+        await scanItem(state.items[i]);
+        el.progressFill.style.width = `${Math.round(((i + 1) / total) * 100)}%`;
+        render();
       }
 
       state.scanning = false;
-      render();
+      state.stopRequested = false;
+      el.btnScanAll.disabled = false;
+      el.btnStopScan.disabled = true;
     }
 
     function addFiles(files) {
-      const validFiles =
-        Array.from(files).filter(file =>
-          file.type.startsWith("image/")
-        );
+      const remainingSlots = Math.max(0, CONFIG.maxBatchSize - state.items.length);
+      const validFiles = Array.from(files)
+        .filter(f => f.type.startsWith("image/"))
+        .slice(0, remainingSlots);
 
-      if (!validFiles.length) {
-        return;
-      }
+      if (!validFiles.length) return;
 
-      const firstNewIndex =
-        state.items.length;
-
-      let loadedCount = 0;
+      const startIdx = state.items.length;
+      let loaded = 0;
 
       validFiles.forEach(file => {
-        const reader =
-          new FileReader();
-
-        reader.onload =
-          event => {
-            const img =
-              new Image();
-
-            img.onload = () => {
-              const autoRotation =
-                img.height >
-                img.width * 1.15
-                  ? 270
-                  : 0;
-
-              state.items.push({
-                name: file.name,
-                url: event.target.result,
-                img,
-                rotation: autoRotation,
-                password: "",
-                door: "",
-                po: "",
-                requester: ""
-              });
-
-              loadedCount++;
-
-              if (
-                state.activeIndex === -1
-              ) {
-                state.activeIndex = 0;
-              }
-
-              render();
-
-              if (
-                loadedCount ===
-                validFiles.length
-              ) {
-                scanAllQueue(
-                  firstNewIndex
-                );
-              }
-            };
-
-            img.src =
-              event.target.result;
+        const reader = new FileReader();
+        reader.onload = ev => {
+          const img = new Image();
+          img.onload = () => {
+            // Default to 0° so user/auto-scan can inspect without forced wrong flip; 270° if tall receipt
+            const autoRot = img.height > img.width * 1.25 ? 270 : 0;
+            state.items.push({
+              name: file.name,
+              img,
+              rotation: autoRot,
+              password: "",
+              door: "",
+              po: "",
+              requester: "",
+              itemCodes: [],
+              ocrWords: [],
+              ocrWidth: 0,
+              ocrHeight: 0,
+              rawText: "",
+              status: "Queued"
+            });
+            loaded++;
+            if (state.activeIndex === -1) state.activeIndex = 0;
+            render();
+            if (loaded === validFiles.length) {
+              scanAllQueue(startIdx);
+            }
           };
-
+          img.src = ev.target.result;
+        };
         reader.readAsDataURL(file);
       });
     }
 
     function renderPreview() {
       const item = current();
-
-      el.photoCounter.textContent =
-        `${state.items.length
-          ? state.activeIndex + 1
-          : 0
-        } / ${state.items.length}`;
+      el.photoCounter.textContent = `${state.items.length ? state.activeIndex + 1 : 0} / ${state.items.length}`;
 
       if (!item) {
-        el.previewBox.innerHTML =
-          "No photo inserted";
+        el.previewBox.innerHTML = "No GRN photos inserted";
+        el.rawOcrPreview.textContent = "";
         return;
       }
 
-      const canvas =
-        getRotatedCanvas(
-          item.img,
-          item.rotation || 0,
-          {
-            scale: 1,
-            maxDimension: 2400,
-            removeRedInk: false,
-            grayscale: false
-          }
-        );
+      const { canvas } = buildCanvas(item.img, item.rotation || 0, {
+        scale: 1,
+        maxDimension: 1400,
+        grayscale: false
+      });
+
+      const stage = document.createElement("div");
+      stage.className = "preview-stage";
+      stage.appendChild(canvas);
 
       el.previewBox.innerHTML = "";
-      el.previewBox.appendChild(canvas);
+      el.previewBox.appendChild(stage);
+      el.rawOcrPreview.textContent = item.rawText || "";
+
+      // Draw red highlight boxes over matched Item Codes once canvas has layout size
+      requestAnimationFrame(() => {
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const boxes = computeItemHighlights(
+          item.ocrWords,
+          item.itemCodes,
+          item.ocrWidth,
+          item.ocrHeight,
+          rect.width,
+          rect.height
+        );
+        for (const b of boxes) {
+          const div = document.createElement("div");
+          div.className = "highlight-box";
+          div.style.left = `${b.x}px`;
+          div.style.top = `${b.y}px`;
+          div.style.width = `${Math.max(12, b.width)}px`;
+          div.style.height = `${Math.max(10, b.height)}px`;
+          stage.appendChild(div);
+        }
+      });
     }
 
     function renderInputsOnly() {
       const item = current();
-
       if (!item) {
         el.pwInput.value = "";
         el.doorInput.value = "";
         el.poInput.value = "";
         el.reqInput.value = "";
+        el.itemInput.value = "";
         return;
       }
-
-      el.pwInput.value =
-        item.password || "";
-
-      el.doorInput.value =
-        item.door || "";
-
-      el.poInput.value =
-        item.po || "";
-
-      el.reqInput.value =
-        item.requester || "";
+      el.pwInput.value = item.password || "";
+      el.doorInput.value = item.door || "";
+      el.poInput.value = item.po || "";
+      el.reqInput.value = item.requester || "";
+      el.itemInput.value = (item.itemCodes || []).join(", ");
     }
 
     function renderTableOnly() {
       if (!state.items.length) {
-        el.tableBody.innerHTML =
-          `<tr>
-            <td colspan="6"
-                style="text-align:center;
-                       color:#94a3b8;
-                       padding:18px;">
-              No records yet
-            </td>
-          </tr>`;
+        el.tableBody.innerHTML = `<tr><td colspan="8" style="text-align:center; color:#94a3b8; padding:18px;">No GRN records yet</td></tr>`;
         return;
       }
 
-      el.tableBody.innerHTML =
-        state.items
-          .map((item, index) => `
-            <tr
-              class="${
-                index === state.activeIndex
-                  ? "active"
-                  : ""
-              }"
-              onclick="selectRow(${index})"
-            >
-              <td>${index + 1}</td>
-              <td>${item.name}</td>
-              <td><b>${item.password || "—"}</b></td>
-              <td><b>${item.door || "—"}</b></td>
-              <td>${item.po || "—"}</td>
-              <td>${item.requester || "—"}</td>
-            </tr>
-          `)
-          .join("");
+      el.tableBody.innerHTML = state.items.map((item, idx) => {
+        const redItems = (item.itemCodes || []).length
+          ? `<span class="item-red">${item.itemCodes.join(", ")}</span>`
+          : "—";
+        return `
+          <tr class="${idx === state.activeIndex ? "active" : ""}" onclick="selectRow(${idx})">
+            <td>${idx + 1}</td>
+            <td>${item.name}</td>
+            <td><b>${item.password || "—"}</b></td>
+            <td><b>${item.door || "—"}</b></td>
+            <td>${item.po || "—"}</td>
+            <td>${item.requester || "—"}</td>
+            <td>${redItems}</td>
+            <td>${item.status || "Queued"}</td>
+          </tr>
+        `;
+      }).join("");
     }
 
     function render() {
@@ -969,287 +778,159 @@
       renderTableOnly();
     }
 
-    window.selectRow = index => {
-      state.activeIndex = index;
+    window.selectRow = idx => {
+      state.activeIndex = idx;
       render();
-
-      const item = current();
-
-      if (item) {
-        el.statusMsg.textContent =
-          `PW: ${item.password || "—"} | ` +
-          `Door: ${item.door || "—"} | ` +
-          `PO: ${item.po || "—"} | ` +
-          `Req: ${item.requester || "—"}`;
-      }
     };
 
     function exportRows() {
-      return state.items.map(
-        (item, index) => ({
-          "No": index + 1,
-          "Photo": item.name,
-          "Password": item.password,
-          "Door #": item.door,
-          "PO Number": item.po,
-          "Requestor": item.requester
-        })
-      );
+      return state.items.map((item, idx) => ({
+        "No": idx + 1,
+        "Photo": item.name,
+        "Password": item.password,
+        "Door #": item.door,
+        "PO Number": item.po,
+        "Requester": item.requester,
+        "Item Codes": (item.itemCodes || []).join(", "),
+        "Status": item.status
+      }));
     }
 
     function exportXlsx() {
-      if (!state.items.length) {
-        return;
-      }
-
-      const sheet =
-        XLSX.utils.json_to_sheet(
-          exportRows()
-        );
-
-      const workbook =
-        XLSX.utils.book_new();
-
-      XLSX.utils.book_append_sheet(
-        workbook,
-        sheet,
-        "GRN"
-      );
-
-      XLSX.writeFile(
-        workbook,
-        `GRN_${
-          new Date()
-            .toISOString()
-            .slice(0, 10)
-        }.xlsx`
-      );
+      if (!state.items.length) return;
+      const sheet = XLSX.utils.json_to_sheet(exportRows());
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, sheet, "GRN_Batch");
+      XLSX.writeFile(wb, `GRN_OCR_${new Date().toISOString().slice(0, 10)}.xlsx`);
     }
 
     function exportCsv() {
-      if (!state.items.length) {
-        return;
-      }
-
+      if (!state.items.length) return;
       const rows = exportRows();
       const keys = Object.keys(rows[0]);
-
-      const csv =
-        "\uFEFF" +
-        [
-          keys.join(","),
-          ...rows.map(row =>
-            keys
-              .map(key =>
-                `"${String(
-                  row[key] ?? ""
-                ).replace(/"/g, '""')}"`
-              )
-              .join(",")
-          )
-        ].join("\n");
-
-      const link =
-        document.createElement("a");
-
-      link.href =
-        URL.createObjectURL(
-          new Blob(
-            [csv],
-            {
-              type:
-                "text/csv;charset=utf-8;"
-            }
-          )
-        );
-
-      link.download =
-        `GRN_${
-          new Date()
-            .toISOString()
-            .slice(0, 10)
-        }.csv`;
-
-      link.click();
+      const csv = "\uFEFF" + [
+        keys.join(","),
+        ...rows.map(r => keys.map(k => `"${String(r[k] ?? "").replace(/"/g, '""')}"`).join(","))
+      ].join("\n");
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+      a.download = `GRN_OCR_${new Date().toISOString().slice(0, 10)}.csv`;
+      a.click();
     }
 
-    document
-      .getElementById("btnAddPhoto")
-      .onclick =
-        () => el.photoInput.click();
+    document.getElementById("btnAddPhoto").onclick = () => el.photoInput.click();
+    el.photoInput.onchange = e => {
+      addFiles(e.target.files);
+      e.target.value = "";
+    };
 
-    el.photoInput.onchange =
-      event => {
-        addFiles(
-          event.target.files
-        );
+    document.getElementById("btnScanAll").onclick = () => scanAllQueue(0);
+    document.getElementById("btnStopScan").onclick = () => {
+      state.stopRequested = true;
+      el.statusMsg.textContent = "Stopping batch scan after current item...";
+    };
 
-        event.target.value = "";
-      };
+    document.getElementById("btnRotate").onclick = async () => {
+      const item = current();
+      if (!item) return;
+      item.rotation = ((item.rotation || 0) + 90) % 360;
+      renderPreview();
+      await scanItem(item);
+      renderInputsOnly();
+      renderTableOnly();
+    };
 
-    document
-      .getElementById("btnRotate")
-      .onclick =
-        async () => {
-          const item = current();
+    document.getElementById("btnScanNow").onclick = async () => {
+      const item = current();
+      if (!item) return;
+      await scanItem(item);
+      renderInputsOnly();
+      renderTableOnly();
+    };
 
-          if (!item) {
-            return;
-          }
+    document.getElementById("btnPrev").onclick = () => {
+      if (state.activeIndex > 0) {
+        state.activeIndex--;
+        render();
+      }
+    };
 
-          item.rotation =
-            (
-              (item.rotation || 0) +
-              90
-            ) % 360;
+    document.getElementById("btnNext").onclick = () => {
+      if (state.activeIndex < state.items.length - 1) {
+        state.activeIndex++;
+        render();
+      }
+    };
 
-          item.password = "";
-          item.door = "";
-          item.po = "";
-          item.requester = "";
+    document.getElementById("btnSaveNext").onclick = () => {
+      const item = current();
+      if (!item) return;
+      item.status = "Confirmed";
+      if (state.activeIndex < state.items.length - 1) {
+        state.activeIndex++;
+      }
+      render();
+    };
 
-          renderPreview();
+    document.getElementById("btnClearFields").onclick = () => {
+      const item = current();
+      if (!item) return;
+      item.password = "";
+      item.door = "";
+      item.po = "";
+      item.requester = "";
+      item.itemCodes = [];
+      item.ocrWords = [];
+      render();
+    };
 
-          await scanItem(item);
+    document.getElementById("btnDelete").onclick = () => {
+      if (!current()) return;
+      state.items.splice(state.activeIndex, 1);
+      state.activeIndex = Math.min(state.activeIndex, state.items.length - 1);
+      render();
+    };
 
-          renderInputsOnly();
-          renderTableOnly();
-        };
+    el.pwInput.oninput = e => {
+      applyPassword(e.target.value);
+      renderInputsOnly();
+      renderTableOnly();
+    };
 
-    document
-      .getElementById("btnScanNow")
-      .onclick =
-        async () => {
-          const item = current();
-
-          if (!item) {
-            return;
-          }
-
-          await scanItem(item);
-
-          renderInputsOnly();
-          renderTableOnly();
-        };
-
-    document
-      .getElementById("btnPrev")
-      .onclick =
-        () => {
-          if (
-            state.activeIndex > 0
-          ) {
-            state.activeIndex--;
-            window.selectRow(
-              state.activeIndex
-            );
-          }
-        };
-
-    document
-      .getElementById("btnNext")
-      .onclick =
-        () => {
-          if (
-            state.activeIndex <
-            state.items.length - 1
-          ) {
-            state.activeIndex++;
-            window.selectRow(
-              state.activeIndex
-            );
-          }
-        };
-
-    document
-      .getElementById("btnSaveNext")
-      .onclick =
-        () => {
-          if (
-            state.activeIndex <
-            state.items.length - 1
-          ) {
-            state.activeIndex++;
-            window.selectRow(
-              state.activeIndex
-            );
-          }
-        };
-
-    document
-      .getElementById("btnDelete")
-      .onclick =
-        () => {
-          if (!current()) {
-            return;
-          }
-
-          state.items.splice(
-            state.activeIndex,
-            1
-          );
-
-          state.activeIndex =
-            Math.min(
-              state.activeIndex,
-              state.items.length - 1
-            );
-
-          render();
-        };
-
-    el.pwInput.oninput =
-      event => {
-        applyPassword(
-          event.target.value
-        );
-
-        renderInputsOnly();
+    el.doorInput.oninput = e => {
+      if (current()) {
+        current().door = e.target.value.replace(/\D/g, "").slice(0, 2);
         renderTableOnly();
-      };
+      }
+    };
 
-    el.doorInput.oninput =
-      event => {
-        if (current()) {
-          current().door =
-            event.target.value
-              .trim();
+    el.poInput.oninput = e => {
+      if (current()) {
+        current().po = e.target.value.trim();
+        renderTableOnly();
+      }
+    };
 
-          renderTableOnly();
-        }
-      };
+    el.reqInput.oninput = e => {
+      if (current()) {
+        current().requester = e.target.value.trim();
+        renderTableOnly();
+      }
+    };
 
-    el.poInput.oninput =
-      event => {
-        if (current()) {
-          current().po =
-            event.target.value
-              .trim();
+    el.itemInput.oninput = e => {
+      if (current()) {
+        current().itemCodes = e.target.value
+          .split(/[,\s]+/)
+          .map(s => s.trim().toUpperCase())
+          .filter(Boolean);
+        renderPreview();
+        renderTableOnly();
+      }
+    };
 
-          renderTableOnly();
-        }
-      };
-
-    el.reqInput.oninput =
-      event => {
-        if (current()) {
-          current().requester =
-            event.target.value
-              .trim();
-
-          renderTableOnly();
-        }
-      };
-
-    document
-      .getElementById("btnExportXlsx")
-      .onclick =
-        exportXlsx;
-
-    document
-      .getElementById("btnExportCsv")
-      .onclick =
-        exportCsv;
+    document.getElementById("btnExportXlsx").onclick = exportXlsx;
+    document.getElementById("btnExportCsv").onclick = exportCsv;
   </script>
 </body>
 </html>

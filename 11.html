@@ -45,6 +45,7 @@
     .btn-green { background: #10b981; color: #052e16; }
     .btn-amber { background: #f59e0b; color: #1e1b4b; }
     .btn-light { background: #e2e8f0; color: #0f172a; }
+    .btn-dark { background: #1e293b; color: #fff; }
     .grid { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 12px; }
     @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
     .card {
@@ -101,6 +102,79 @@
       font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
       font-size: 13px;
     }
+    .pw-scan-group {
+      display: flex;
+      gap: 6px;
+      align-items: stretch;
+    }
+    .pw-scan-group input {
+      flex: 1;
+      min-width: 0;
+    }
+    .scan-field-panel {
+      border: 1.5px solid #38bdf8;
+      background: #f0f9ff;
+      border-radius: 9px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .scan-field-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .scan-field-badge {
+      font-size: 11px;
+      font-weight: 800;
+      background: #e0f2fe;
+      color: #0369a1;
+      padding: 3px 8px;
+      border-radius: 999px;
+    }
+    .scan-video-wrap {
+      position: relative;
+      width: 100%;
+      height: 210px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #000;
+    }
+    .scan-video-wrap video {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+    }
+    .scan-reticle {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 86%;
+      height: 96px;
+      border: 2.5px solid #38bdf8;
+      border-radius: 10px;
+      box-shadow: 0 0 0 9999px rgba(0, 0, 0, 0.45);
+      pointer-events: none;
+    }
+    .scan-laser {
+      position: absolute;
+      top: 50%;
+      left: 6%;
+      right: 6%;
+      height: 2px;
+      background: #ef4444;
+      box-shadow: 0 0 8px #ef4444;
+      animation: laserScan 1.6s infinite ease-in-out;
+    }
+    @keyframes laserScan {
+      0%, 100% { transform: translateY(-30px); }
+      50% { transform: translateY(30px); }
+    }
     .door-box {
       background: #fef08a;
       border-color: #eab308;
@@ -156,7 +230,7 @@
     }
     th { background: #f8fafc; font-weight: 700; color: #334155; }
     tr.active { background: #eff6ff; }
-    .hidden { display: none; }
+    .hidden { display: none !important; }
     details.raw-box { font-size: 11px; color: #475569; }
     details.raw-box pre {
       margin-top: 6px;
@@ -173,6 +247,8 @@
 </head>
 <body>
   <input type="file" id="photoInput" accept="image/*" multiple class="hidden" />
+  <input type="file" id="nativeBarcodePhotoInput" accept="image/*" capture="environment" class="hidden" />
+
   <div class="app">
     <div class="bar">
       <div>
@@ -213,13 +289,36 @@
         <div class="row-2">
           <div>
             <label for="pwInput">1. Scanner Password (9 digits)</label>
-            <input id="pwInput" type="text" placeholder="Scan barcode or type 9 digits" />
+            <div class="pw-scan-group">
+              <input id="pwInput" type="text" inputmode="numeric" placeholder="Scan barcode or type 9 digits" />
+              <button id="btnToggleBarcodeCam" type="button" class="btn-blue">📷 Scan</button>
+              <button id="btnNativeBarcodeCam" type="button" class="btn-light" title="Capture barcode photo">📸</button>
+            </div>
           </div>
           <div>
             <label for="doorInput">Door # (Auto Last 2 Digits)</label>
             <input id="doorInput" type="text" class="door-box" placeholder="--" maxlength="2" />
           </div>
         </div>
+
+        <div id="barcodeScanField" class="scan-field-panel hidden">
+          <div class="scan-field-header">
+            <span id="barcodeEngineBadge" class="scan-field-badge">⚡ Ready</span>
+            <div class="actions">
+              <button id="btnCloseBarcodeCam" type="button" class="btn-dark" style="padding:5px 10px; font-size:11px;">Close Cam</button>
+            </div>
+          </div>
+          <div class="scan-video-wrap">
+            <video id="barcodeVideo" autoplay muted playsinline></video>
+            <div class="scan-reticle">
+              <div class="scan-laser"></div>
+            </div>
+          </div>
+          <div id="barcodeScanMsg" style="font-size:12px; font-weight:700; color:#0f172a; text-align:center;">
+            Align barcode inside the blue frame to fill Password &amp; Door #
+          </div>
+        </div>
+
         <div class="row-2">
           <div>
             <label for="poInput">2. PO Number (3401...)</label>
@@ -271,16 +370,26 @@
       maxBatchSize: 100
     };
 
+    const REQUIRED_BARCODE_FORMATS = ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "codabar", "itf", "qr_code"];
+    const MAX_NATIVE_DETECT_ERRORS = 3;
+
     const state = {
       items: [],
       activeIndex: -1,
       worker: null,
       scanning: false,
-      stopRequested: false
+      stopRequested: false,
+      barcodeCamActive: false,
+      barcodeStream: null,
+      barcodeLoopTimer: null,
+      barcodeDecodingFrame: false,
+      zxingReader: null,
+      barcodeHandled: false
     };
 
     const el = {
       photoInput: document.getElementById("photoInput"),
+      nativeBarcodePhotoInput: document.getElementById("nativeBarcodePhotoInput"),
       previewBox: document.getElementById("previewBox"),
       photoCounter: document.getElementById("photoCounter"),
       statusMsg: document.getElementById("statusMsg"),
@@ -293,7 +402,14 @@
       itemInput: document.getElementById("itemInput"),
       tableBody: document.getElementById("tableBody"),
       btnScanAll: document.getElementById("btnScanAll"),
-      btnStopScan: document.getElementById("btnStopScan")
+      btnStopScan: document.getElementById("btnStopScan"),
+      btnToggleBarcodeCam: document.getElementById("btnToggleBarcodeCam"),
+      btnNativeBarcodeCam: document.getElementById("btnNativeBarcodeCam"),
+      btnCloseBarcodeCam: document.getElementById("btnCloseBarcodeCam"),
+      barcodeScanField: document.getElementById("barcodeScanField"),
+      barcodeEngineBadge: document.getElementById("barcodeEngineBadge"),
+      barcodeVideo: document.getElementById("barcodeVideo"),
+      barcodeScanMsg: document.getElementById("barcodeScanMsg")
     };
 
     function current() {
@@ -301,10 +417,16 @@
     }
 
     function applyPassword(rawPassword, item = current()) {
-      if (!item) return;
       const cleaned = String(rawPassword || "").replace(/\D/g, "");
-      item.password = cleaned;
-      item.door = cleaned.length >= 2 ? cleaned.slice(-2) : "";
+      const door = cleaned.length >= 2 ? cleaned.slice(-2) : "";
+      if (item) {
+        item.password = cleaned;
+        item.door = door;
+      }
+      if (item === current() || !item) {
+        el.pwInput.value = cleaned;
+        el.doorInput.value = door;
+      }
     }
 
     function normalizeDigits(text) {
@@ -327,62 +449,56 @@
       const digits = String(rawValue || "").replace(/\D/g, "");
       if (digits.length === CONFIG.passwordLength) return digits;
       const m = digits.match(/\d{9}/);
-      return m ? m[0] : "";
+      return m ? m[0] : (digits || "");
     }
 
-    function isBlockedRequesterToken(token) {
-      const lower = String(token || "").toLowerCase();
-      return (
-        !lower ||
-        lower.startsWith("curr") ||
-        lower.startsWith("price") ||
-        lower.endsWith(".mop") ||
-        lower === "no.of" ||
-        lower === "david.fong" ||
-        lower.startsWith("prg")
-      );
+    function extractOcrPasswordFallback(text) {
+      const lines = String(text || "").split(/\r?\n/);
+      for (const line of lines) {
+        if (/goods\s*receipt|p\/?o\s*no|account\s*assignment|vendor\s*delivery/i.test(line)) continue;
+        const d = normalizeDigits(line);
+        const matches = d.match(/\d{9}/g) || [];
+        for (const candidate of matches) {
+          if (!candidate.startsWith("3401") && !candidate.startsWith("5004")) {
+            return candidate;
+          }
+        }
+      }
+      return "";
     }
 
     function extractRequester(text) {
       const cleaned = String(text || "").replace(/[|]/g, "I");
       const lines = cleaned.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-      // 1. Strict firstname.lastname / firstname.initial pattern (e.g. martin.tai, charlotte.u)
+      for (let i = 0; i < lines.length; i++) {
+        if (/requestor/i.test(lines[i])) {
+          const windowText = [lines[i], lines[i + 1] || "", lines[i + 2] || ""].join(" ");
+          const userMatch = windowText.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/);
+          if (userMatch && !/^(curr|price|net|amt|unit|dept|cea)$/i.test(userMatch[1])) {
+            return userMatch[1].toLowerCase();
+          }
+          const idMatch = windowText.match(/\b(08\d{6})\b/);
+          if (idMatch) return idMatch[1];
+        }
+      }
+
       for (const line of lines) {
         if (/entered\s*by|curr\.?|unit\s*price|po\s*net\s*amt/i.test(line)) continue;
-        const dotMatches = line.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/g) || [];
-        for (const m of dotMatches) {
-          if (!isBlockedRequesterToken(m)) {
-            return m.toLowerCase();
+        const matches = line.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/g) || [];
+        for (const m of matches) {
+          const lower = m.toLowerCase();
+          if (
+            !lower.startsWith("curr") &&
+            !lower.startsWith("price") &&
+            !lower.endsWith(".mop") &&
+            lower !== "no.of"
+          ) {
+            return lower;
           }
         }
       }
 
-      // 2. Spaced or slightly misread dot name near "David Fong", "PRG", or "Requestor"
-      for (const line of lines) {
-        if (/entered\s*by|curr\.?|unit\s*price|po\s*net\s*amt/i.test(line)) continue;
-        const hasContext = /david\s*fong|prg\d|requestor/i.test(line);
-        if (!hasContext) continue;
-
-        const pairMatch = line.match(/\b([A-Za-z]{3,20})[\s._,]+([A-Za-z]{1,20})\b/g) || [];
-        for (const pair of pairMatch) {
-          const parts = pair.trim().split(/[\s._,]+/);
-          if (parts.length === 2) {
-            const a = parts[0].toLowerCase();
-            const b = parts[1].toLowerCase();
-            if (
-              !["david", "fong", "buyer", "requestor", "account", "assignment", "curr", "unit", "price", "total", "goods", "ordered", "delivered", "vendor"].includes(a) &&
-              !a.startsWith("prg") &&
-              !b.startsWith("prg") &&
-              b !== "mop"
-            ) {
-              return `${a}.${b}`;
-            }
-          }
-        }
-      }
-
-      // 3. 8-digit requestor ID starting with 08 (excluding "Entered by")
       for (const line of lines) {
         if (/entered\s*by/i.test(line)) continue;
         const idMatch = line.match(/\b(08\d{6})\b/);
@@ -413,17 +529,18 @@
     function buildCanvas(img, rotation = 0, options = {}) {
       const {
         scale = 1,
-        maxDimension = 2800,
+        maxDimension = 2600,
         grayscale = false,
         contrast = 1,
-        threshold = 0
+        threshold = 0,
+        invert = false
       } = options;
 
       const rad = (rotation * Math.PI) / 180;
       const sin = Math.abs(Math.sin(rad));
       const cos = Math.abs(Math.cos(rad));
-      const sw = img.naturalWidth || img.width;
-      const sh = img.naturalHeight || img.height;
+      const sw = img.naturalWidth || img.videoWidth || img.width;
+      const sh = img.naturalHeight || img.videoHeight || img.height;
 
       const rw = sw * cos + sh * sin;
       const rh = sw * sin + sh * cos;
@@ -444,7 +561,7 @@
       ctx.drawImage(img, -(sw * finalScale) / 2, -(sh * finalScale) / 2, sw * finalScale, sh * finalScale);
       ctx.restore();
 
-      if (grayscale || threshold > 0) {
+      if (grayscale || threshold > 0 || invert) {
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const d = imgData.data;
         for (let i = 0; i < d.length; i += 4) {
@@ -452,6 +569,7 @@
           if (contrast !== 1) g = (g - 128) * contrast + 128;
           g = Math.max(0, Math.min(255, g));
           if (threshold > 0) g = g >= threshold ? 255 : 0;
+          if (invert) g = 255 - g;
           d[i] = d[i + 1] = d[i + 2] = g;
         }
         ctx.putImageData(imgData, 0, 0);
@@ -476,6 +594,336 @@
       return c;
     }
 
+    // =========================================================
+    // Live Barcode Scanning Field (26.html style) for Password & Door #
+    // =========================================================
+    function playScanBeep() {
+      try {
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        if (!AudioCtx) return;
+        const ctx = new AudioCtx();
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = "sine";
+        osc.frequency.setValueAtTime(1050, ctx.currentTime);
+        gain.gain.setValueAtTime(0.14, ctx.currentTime);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.11);
+      } catch (_) {}
+    }
+
+    function isHuaweiOrXiaomiDevice() {
+      const ua = (navigator.userAgent || "").toLowerCase();
+      return /huawei|honor|harmonyos|emui|xiaomi|redmi|\bmi\b|miui|hyperos/.test(ua);
+    }
+
+    function setBarcodeBadge(mode, isHwXm = false) {
+      if (!el.barcodeEngineBadge) return;
+      if (isHwXm) {
+        el.barcodeEngineBadge.textContent = "📱 Huawei/Xiaomi Mode (ZXing)";
+        el.barcodeEngineBadge.style.background = "#fef3c7";
+        el.barcodeEngineBadge.style.color = "#92400e";
+      } else if (mode === "native") {
+        el.barcodeEngineBadge.textContent = "⚡ Fast Scanner (BarcodeDetector)";
+        el.barcodeEngineBadge.style.background = "#dcfce7";
+        el.barcodeEngineBadge.style.color = "#166534";
+      } else {
+        el.barcodeEngineBadge.textContent = "🔄 Compatible Scanner (ZXing)";
+        el.barcodeEngineBadge.style.background = "#e0f2fe";
+        el.barcodeEngineBadge.style.color = "#0369a1";
+      }
+    }
+
+    async function getSupportedNativeFormats() {
+      if (typeof window.BarcodeDetector === "undefined") return [];
+      if (typeof window.BarcodeDetector.getSupportedFormats !== "function") {
+        return REQUIRED_BARCODE_FORMATS;
+      }
+      try {
+        const supported = await window.BarcodeDetector.getSupportedFormats();
+        if (!Array.isArray(supported) || !supported.length) return [];
+        const supportedSet = new Set(supported.map(f => String(f).toLowerCase()));
+        return REQUIRED_BARCODE_FORMATS.filter(f => supportedSet.has(f.toLowerCase()));
+      } catch (_) {
+        return [];
+      }
+    }
+
+    async function acquireBarcodeStream() {
+      const candidates = [
+        { video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false },
+        { video: { facingMode: { ideal: "environment" }, width: { ideal: 640 }, height: { ideal: 480 } }, audio: false },
+        { video: { facingMode: "environment" }, audio: false },
+        { video: true, audio: false }
+      ];
+      let lastErr = null;
+      for (const c of candidates) {
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia(c);
+          if (stream) return stream;
+        } catch (err) {
+          lastErr = err;
+        }
+      }
+      throw lastErr || new Error("Unable to open camera stream");
+    }
+
+    function onBarcodeScanned(rawValue) {
+      if (state.barcodeHandled) return;
+      const pw = extractBarcodePassword(rawValue);
+      if (!pw) return;
+
+      state.barcodeHandled = true;
+      playScanBeep();
+      if (navigator.vibrate) navigator.vibrate(90);
+
+      applyPassword(pw);
+      const item = current();
+      if (item) {
+        el.statusMsg.textContent = `${item.name} → PW: ${item.password} | Door: ${item.door || "—"}`;
+      }
+      renderTableOnly();
+      closeBarcodeScanner();
+    }
+
+    function startZxingBarcodeLoop(videoEl, isHwXm = false) {
+      if (state.barcodeHandled || !state.barcodeCamActive) return;
+      setBarcodeBadge("zxing", isHwXm);
+
+      if (state.barcodeLoopTimer) {
+        clearTimeout(state.barcodeLoopTimer);
+        state.barcodeLoopTimer = null;
+      }
+
+      if (!window.ZXingBrowser || !window.ZXingBrowser.BrowserMultiFormatReader) {
+        el.barcodeScanMsg.textContent = "ZXing library unavailable; use 📸 photo scan.";
+        return;
+      }
+
+      if (!state.zxingReader) {
+        state.zxingReader = new window.ZXingBrowser.BrowserMultiFormatReader();
+      }
+
+      const frameCanvas = document.createElement("canvas");
+      const frameCtx = frameCanvas.getContext("2d", { willReadFrequently: true });
+      let counter = 0;
+
+      const tick = async () => {
+        if (state.barcodeHandled || !state.barcodeCamActive || !state.barcodeStream) return;
+
+        if (
+          !state.barcodeDecodingFrame &&
+          videoEl.readyState >= videoEl.HAVE_CURRENT_DATA &&
+          videoEl.videoWidth > 0 &&
+          videoEl.videoHeight > 0
+        ) {
+          state.barcodeDecodingFrame = true;
+          try {
+            const fullFrame = (counter++ % 2 === 1);
+            const sw = fullFrame ? videoEl.videoWidth : Math.floor(videoEl.videoWidth * 0.9);
+            const sh = fullFrame ? videoEl.videoHeight : Math.floor(videoEl.videoHeight * 0.6);
+            const sx = Math.floor((videoEl.videoWidth - sw) / 2);
+            const sy = Math.floor((videoEl.videoHeight - sh) / 2);
+
+            frameCanvas.width = sw;
+            frameCanvas.height = sh;
+            frameCtx.drawImage(videoEl, sx, sy, sw, sh, 0, 0, sw, sh);
+
+            const res = await state.zxingReader.decodeFromImageUrl(frameCanvas.toDataURL("image/jpeg", 0.85));
+            const txt = res && (res.getText ? res.getText() : res.text);
+            if (txt) {
+              state.barcodeDecodingFrame = false;
+              onBarcodeScanned(txt);
+              return;
+            }
+          } catch (_) {}
+          finally {
+            state.barcodeDecodingFrame = false;
+          }
+        }
+
+        state.barcodeLoopTimer = setTimeout(tick, 110);
+      };
+
+      tick();
+    }
+
+    async function openBarcodeScanner() {
+      if (state.barcodeCamActive) {
+        closeBarcodeScanner();
+        return;
+      }
+
+      if (!window.isSecureContext || !navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+        el.nativeBarcodePhotoInput.value = "";
+        el.nativeBarcodePhotoInput.click();
+        return;
+      }
+
+      el.barcodeScanField.classList.remove("hidden");
+      el.barcodeScanMsg.textContent = "Starting camera...";
+      state.barcodeCamActive = true;
+      state.barcodeHandled = false;
+      state.barcodeDecodingFrame = false;
+
+      const isHwXm = isHuaweiOrXiaomiDevice();
+
+      try {
+        const stream = await acquireBarcodeStream();
+        state.barcodeStream = stream;
+        el.barcodeVideo.srcObject = stream;
+        await el.barcodeVideo.play();
+        el.barcodeScanMsg.textContent = "Align barcode inside the blue frame to fill Password & Door #";
+      } catch (_) {
+        closeBarcodeScanner();
+        el.nativeBarcodePhotoInput.value = "";
+        el.nativeBarcodePhotoInput.click();
+        return;
+      }
+
+      if (isHwXm) {
+        startZxingBarcodeLoop(el.barcodeVideo, true);
+        return;
+      }
+
+      const formats = await getSupportedNativeFormats();
+      if (formats.length > 0) {
+        try {
+          const detector = new window.BarcodeDetector({ formats });
+          setBarcodeBadge("native", false);
+          const cropCanvas = document.createElement("canvas");
+          const cropCtx = cropCanvas.getContext("2d", { willReadFrequently: true });
+          let errors = 0;
+
+          const loop = async () => {
+            if (state.barcodeHandled || !state.barcodeCamActive || !state.barcodeStream) return;
+
+            if (
+              el.barcodeVideo.readyState >= el.barcodeVideo.HAVE_CURRENT_DATA &&
+              el.barcodeVideo.videoWidth > 0 &&
+              el.barcodeVideo.videoHeight > 0
+            ) {
+              const sw = Math.floor(el.barcodeVideo.videoWidth * 0.88);
+              const sh = Math.floor(el.barcodeVideo.videoHeight * 0.52);
+              const sx = Math.floor((el.barcodeVideo.videoWidth - sw) / 2);
+              const sy = Math.floor((el.barcodeVideo.videoHeight - sh) / 2);
+
+              cropCanvas.width = sw;
+              cropCanvas.height = sh;
+              cropCtx.drawImage(el.barcodeVideo, sx, sy, sw, sh, 0, 0, sw, sh);
+
+              try {
+                const codes = await detector.detect(cropCanvas);
+                errors = 0;
+                if (codes && codes.length > 0 && codes[0].rawValue) {
+                  onBarcodeScanned(codes[0].rawValue);
+                  return;
+                }
+              } catch (_) {
+                errors += 1;
+                if (errors >= MAX_NATIVE_DETECT_ERRORS) {
+                  startZxingBarcodeLoop(el.barcodeVideo, false);
+                  return;
+                }
+              }
+            }
+
+            state.barcodeLoopTimer = setTimeout(loop, 80);
+          };
+
+          loop();
+          return;
+        } catch (_) {}
+      }
+
+      startZxingBarcodeLoop(el.barcodeVideo, false);
+    }
+
+    function closeBarcodeScanner() {
+      state.barcodeCamActive = false;
+      state.barcodeDecodingFrame = false;
+
+      if (state.barcodeLoopTimer) {
+        clearTimeout(state.barcodeLoopTimer);
+        state.barcodeLoopTimer = null;
+      }
+
+      if (state.zxingReader) {
+        try { state.zxingReader.reset(); } catch (_) {}
+        state.zxingReader = null;
+      }
+
+      if (state.barcodeStream) {
+        try { state.barcodeStream.getTracks().forEach(t => t.stop()); } catch (_) {}
+        state.barcodeStream = null;
+      }
+
+      if (el.barcodeVideo) {
+        try { el.barcodeVideo.pause(); } catch (_) {}
+        if (el.barcodeVideo.srcObject) {
+          try { el.barcodeVideo.srcObject.getTracks().forEach(t => t.stop()); } catch (_) {}
+          el.barcodeVideo.srcObject = null;
+        }
+      }
+
+      el.barcodeScanField.classList.add("hidden");
+    }
+
+    async function decodeFromPhotoElement(imgEl) {
+      if (typeof window.BarcodeDetector !== "undefined") {
+        try {
+          const formats = await getSupportedNativeFormats();
+          if (formats.length > 0) {
+            const detector = new window.BarcodeDetector({ formats });
+            const found = await detector.detect(imgEl);
+            if (found && found.length > 0 && found[0].rawValue) return found[0].rawValue;
+          }
+        } catch (_) {}
+      }
+
+      if (window.ZXingBrowser && window.ZXingBrowser.BrowserMultiFormatReader) {
+        const reader = new window.ZXingBrowser.BrowserMultiFormatReader();
+        for (const maxDim of [1280, 800, 1600]) {
+          try {
+            const { canvas } = buildCanvas(imgEl, 0, { maxDimension: maxDim });
+            const res = await reader.decodeFromImageUrl(canvas.toDataURL("image/jpeg", 0.92));
+            const txt = res && (res.getText ? res.getText() : res.text);
+            if (txt) return txt;
+          } catch (_) {}
+        }
+      }
+
+      return "";
+    }
+
+    el.nativeBarcodePhotoInput.onchange = e => {
+      const file = e.target.files && e.target.files[0];
+      e.target.value = "";
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = ev => {
+        const img = new Image();
+        img.onload = async () => {
+          const code = await decodeFromPhotoElement(img);
+          const pw = extractBarcodePassword(code);
+          if (pw) {
+            applyPassword(pw);
+            renderTableOnly();
+            el.statusMsg.textContent = `Barcode scanned → PW: ${pw} | Door: ${pw.slice(-2)}`;
+          } else {
+            alert("Could not read a barcode from the photo. Try closer framing or type the 9 digits manually.");
+          }
+        };
+        img.src = ev.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+
+    // =========================================================
+    // OCR & Extraction
+    // =========================================================
     async function getWorker() {
       if (state.worker) return state.worker;
       state.worker = await Tesseract.createWorker("eng");
@@ -504,9 +952,8 @@
     async function tryDecodeCanvas(canvas) {
       if ("BarcodeDetector" in window) {
         try {
-          const detector = new BarcodeDetector({
-            formats: ["code_128", "code_39", "ean_13", "ean_8", "upc_a", "itf"]
-          });
+          const formats = await getSupportedNativeFormats();
+          const detector = new BarcodeDetector({ formats: formats.length ? formats : undefined });
           const codes = await detector.detect(canvas);
           for (const c of codes) {
             const pw = extractBarcodePassword(c.rawValue);
@@ -515,12 +962,13 @@
         } catch (_) {}
       }
 
-      if (window.ZXingBrowser) {
+      if (window.ZXingBrowser && window.ZXingBrowser.BrowserMultiFormatReader) {
         try {
           const reader = new ZXingBrowser.BrowserMultiFormatReader();
           const result = await reader.decodeFromImageUrl(canvas.toDataURL("image/png"));
-          if (result) {
-            const pw = extractBarcodePassword(result.getText());
+          const txt = result && (result.getText ? result.getText() : result.text);
+          if (txt) {
+            const pw = extractBarcodePassword(txt);
             if (pw) return pw;
           }
         } catch (_) {}
@@ -537,11 +985,11 @@
       });
 
       const { canvas: highContrast } = buildCanvas(img, rotation || 0, {
-        scale: 1.25,
-        maxDimension: 2500,
+        scale: 1.2,
+        maxDimension: 2400,
         grayscale: true,
-        contrast: 1.65,
-        threshold: 160
+        contrast: 1.5,
+        threshold: 165
       });
 
       const candidates = [
@@ -592,32 +1040,42 @@
       const barcodePw = await scanBarcodeMultiRegion(item.img, item.rotation || 0);
 
       const { canvas: ocrCanvas } = buildCanvas(item.img, item.rotation || 0, {
-        scale: 1.25,
+        scale: 1.5,
         maxDimension: 2600,
         grayscale: true,
         contrast: 1.35
       });
 
       const pageRes = await runOcr(ocrCanvas, "6", "");
-      item.rawText = pageRes.text;
+      let combinedText = pageRes.text || "";
 
-      let po = extractPoNumber(pageRes.text);
-      let req = extractRequester(pageRes.text);
-      let items = extractItemCodes(pageRes.text);
+      let po = extractPoNumber(combinedText);
+      let req = extractRequester(combinedText);
+      let items = extractItemCodes(combinedText);
+      let pw = barcodePw || extractOcrPasswordFallback(combinedText);
 
-      if (!req || !items.length) {
-        const detailArea = cropCanvas(ocrCanvas, 0.0, 0.15, 0.95, 0.8);
-        const detailRes = await runOcr(detailArea, "6", "");
-        if (!req) req = extractRequester(detailRes.text);
-        if (!items.length) items = extractItemCodes(detailRes.text);
+      if (!po || !req) {
+        const rightBlock = cropCanvas(ocrCanvas, 0.35, 0.15, 0.65, 0.85);
+        const { canvas: zoomRight } = buildCanvas(rightBlock, 0, {
+          scale: 1.5,
+          maxDimension: 2600,
+          grayscale: true,
+          contrast: 1.4
+        });
+        const rightRes = await runOcr(zoomRight, "6", "");
+        combinedText += "\n" + (rightRes.text || "");
+        if (!po) po = extractPoNumber(rightRes.text);
+        if (!req) req = extractRequester(rightRes.text);
       }
 
-      if (!po) {
-        const rightHalf = cropCanvas(ocrCanvas, 0.45, 0.0, 0.55, 0.75);
-        const poRes = await runOcr(rightHalf, "6", "0123456789POno:/ ");
-        po = extractPoNumber(poRes.text);
+      if (!items.length) {
+        const goodsBlock = cropCanvas(ocrCanvas, 0.0, 0.2, 1.0, 0.75);
+        const goodsRes = await runOcr(goodsBlock, "6", "");
+        combinedText += "\n" + (goodsRes.text || "");
+        items = extractItemCodes(goodsRes.text);
       }
 
+      item.rawText = combinedText.trim();
       item.po = po || item.po || "";
       item.requester = req || item.requester || "";
       item.itemCodes = items.length ? items : (item.itemCodes || []);
@@ -625,10 +1083,8 @@
       item.ocrWidth = ocrCanvas.width;
       item.ocrHeight = ocrCanvas.height;
 
-      if (barcodePw) {
-        applyPassword(barcodePw, item);
-      } else if (!item.password) {
-        item.door = "";
+      if (pw) {
+        applyPassword(pw, item);
       }
 
       item.status = (item.po && item.requester && item.itemCodes.length) ? "Done" : "Review";
@@ -839,6 +1295,14 @@
       a.click();
     }
 
+    el.btnToggleBarcodeCam.onclick = openBarcodeScanner;
+    el.btnCloseBarcodeCam.onclick = closeBarcodeScanner;
+    el.btnNativeBarcodeCam.onclick = () => {
+      closeBarcodeScanner();
+      el.nativeBarcodePhotoInput.value = "";
+      el.nativeBarcodePhotoInput.click();
+    };
+
     document.getElementById("btnAddPhoto").onclick = () => el.photoInput.click();
     el.photoInput.onchange = e => {
       addFiles(e.target.files);
@@ -914,7 +1378,6 @@
 
     el.pwInput.oninput = e => {
       applyPassword(e.target.value);
-      renderInputsOnly();
       renderTableOnly();
     };
 

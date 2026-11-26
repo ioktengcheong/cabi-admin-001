@@ -330,57 +330,59 @@
       return m ? m[0] : "";
     }
 
-    function extractOcrPasswordFallback(text) {
-      // Match 9-digit numbers that are NOT PO numbers (3401...) or GRN receipt numbers (50045...)
-      const lines = String(text || "").split(/\r?\n/);
-      for (const line of lines) {
-        if (/goods\s*receipt|p\/?o\s*no|account\s*assignment|vendor\s*delivery/i.test(line)) continue;
-        const d = normalizeDigits(line);
-        const matches = d.match(/\d{9}/g) || [];
-        for (const candidate of matches) {
-          if (!candidate.startsWith("3401") && !candidate.startsWith("5004")) {
-            return candidate;
-          }
-        }
-      }
-      return "";
+    function isBlockedRequesterToken(token) {
+      const lower = String(token || "").toLowerCase();
+      return (
+        !lower ||
+        lower.startsWith("curr") ||
+        lower.startsWith("price") ||
+        lower.endsWith(".mop") ||
+        lower === "no.of" ||
+        lower === "david.fong" ||
+        lower.startsWith("prg")
+      );
     }
 
     function extractRequester(text) {
       const cleaned = String(text || "").replace(/[|]/g, "I");
       const lines = cleaned.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
 
-      // 1. Check near "Requestor" keyword first
-      for (let i = 0; i < lines.length; i++) {
-        if (/requestor/i.test(lines[i])) {
-          const windowText = [lines[i], lines[i + 1] || "", lines[i + 2] || ""].join(" ");
-          const userMatch = windowText.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/);
-          if (userMatch && !/^(curr|price|net|amt|unit|dept|cea)$/i.test(userMatch[1])) {
-            return userMatch[1].toLowerCase();
-          }
-          const idMatch = windowText.match(/\b(08\d{6})\b/);
-          if (idMatch) return idMatch[1];
-        }
-      }
-
-      // 2. Match dot usernames (e.g. martin.tai, charlotte.u) excluding currency/header noise
+      // 1. Strict firstname.lastname / firstname.initial pattern (e.g. martin.tai, charlotte.u)
       for (const line of lines) {
         if (/entered\s*by|curr\.?|unit\s*price|po\s*net\s*amt/i.test(line)) continue;
-        const matches = line.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/g) || [];
-        for (const m of matches) {
-          const lower = m.toLowerCase();
-          if (
-            !lower.startsWith("curr") &&
-            !lower.startsWith("price") &&
-            !lower.endsWith(".mop") &&
-            lower !== "no.of"
-          ) {
-            return lower;
+        const dotMatches = line.match(/\b([A-Za-z]{2,25}\.[A-Za-z]{1,25})\b/g) || [];
+        for (const m of dotMatches) {
+          if (!isBlockedRequesterToken(m)) {
+            return m.toLowerCase();
           }
         }
       }
 
-      // 3. Match 8-digit requestor ID starting with 08 (excluding "Entered by")
+      // 2. Spaced or slightly misread dot name near "David Fong", "PRG", or "Requestor"
+      for (const line of lines) {
+        if (/entered\s*by|curr\.?|unit\s*price|po\s*net\s*amt/i.test(line)) continue;
+        const hasContext = /david\s*fong|prg\d|requestor/i.test(line);
+        if (!hasContext) continue;
+
+        const pairMatch = line.match(/\b([A-Za-z]{3,20})[\s._,]+([A-Za-z]{1,20})\b/g) || [];
+        for (const pair of pairMatch) {
+          const parts = pair.trim().split(/[\s._,]+/);
+          if (parts.length === 2) {
+            const a = parts[0].toLowerCase();
+            const b = parts[1].toLowerCase();
+            if (
+              !["david", "fong", "buyer", "requestor", "account", "assignment", "curr", "unit", "price", "total", "goods", "ordered", "delivered", "vendor"].includes(a) &&
+              !a.startsWith("prg") &&
+              !b.startsWith("prg") &&
+              b !== "mop"
+            ) {
+              return `${a}.${b}`;
+            }
+          }
+        }
+      }
+
+      // 3. 8-digit requestor ID starting with 08 (excluding "Entered by")
       for (const line of lines) {
         if (/entered\s*by/i.test(line)) continue;
         const idMatch = line.match(/\b(08\d{6})\b/);
@@ -414,8 +416,7 @@
         maxDimension = 2800,
         grayscale = false,
         contrast = 1,
-        threshold = 0,
-        invert = false
+        threshold = 0
       } = options;
 
       const rad = (rotation * Math.PI) / 180;
@@ -443,7 +444,7 @@
       ctx.drawImage(img, -(sw * finalScale) / 2, -(sh * finalScale) / 2, sw * finalScale, sh * finalScale);
       ctx.restore();
 
-      if (grayscale || threshold > 0 || invert) {
+      if (grayscale || threshold > 0) {
         const imgData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const d = imgData.data;
         for (let i = 0; i < d.length; i += 4) {
@@ -451,7 +452,6 @@
           if (contrast !== 1) g = (g - 128) * contrast + 128;
           g = Math.max(0, Math.min(255, g));
           if (threshold > 0) g = g >= threshold ? 255 : 0;
-          if (invert) g = 255 - g;
           d[i] = d[i + 1] = d[i + 2] = g;
         }
         ctx.putImageData(imgData, 0, 0);
@@ -537,11 +537,11 @@
       });
 
       const { canvas: highContrast } = buildCanvas(img, rotation || 0, {
-        scale: 1.2,
-        maxDimension: 2400,
+        scale: 1.25,
+        maxDimension: 2500,
         grayscale: true,
-        contrast: 1.6,
-        threshold: 165
+        contrast: 1.65,
+        threshold: 160
       });
 
       const candidates = [
@@ -604,9 +604,7 @@
       let po = extractPoNumber(pageRes.text);
       let req = extractRequester(pageRes.text);
       let items = extractItemCodes(pageRes.text);
-      let pw = barcodePw || extractOcrPasswordFallback(pageRes.text);
 
-      // Targeted pass for Requester + Item Codes if missed on full-page OCR
       if (!req || !items.length) {
         const detailArea = cropCanvas(ocrCanvas, 0.0, 0.15, 0.95, 0.8);
         const detailRes = await runOcr(detailArea, "6", "");
@@ -627,8 +625,10 @@
       item.ocrWidth = ocrCanvas.width;
       item.ocrHeight = ocrCanvas.height;
 
-      if (pw) {
-        applyPassword(pw, item);
+      if (barcodePw) {
+        applyPassword(barcodePw, item);
+      } else if (!item.password) {
+        item.door = "";
       }
 
       item.status = (item.po && item.requester && item.itemCodes.length) ? "Done" : "Review";
